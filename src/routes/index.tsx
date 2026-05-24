@@ -1,26 +1,147 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Layout } from "@/components/Layout";
+import { SongRow } from "@/components/SongRow";
+import type { Song } from "@/lib/player-store";
+import { usePlayer } from "@/lib/player-store";
+import { Play, Music } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { getOwnerKey } from "@/lib/owner";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({ meta: [{ title: "Wavely — Home" }] }),
+  component: HomePage,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+function HomePage() {
+  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { data: songs = [] } = useQuery({
+    queryKey: ["songs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("songs").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Song[];
+    },
+  });
+
+  const { data: playlists = [] } = useQuery({
+    queryKey: ["playlists", owner],
+    queryFn: async () => {
+      const { data } = await supabase.from("playlists").select("*").order("updated_at", { ascending: false }).limit(6);
+      return data ?? [];
+    },
+    enabled: !!owner,
+  });
+
+  const { playQueue } = usePlayer();
+  const recent = songs.slice(0, 8);
+  const byGenre: Record<string, Song[]> = {};
+  for (const s of songs) {
+    const g = s.genre || "Other";
+    (byGenre[g] ||= []).push(s);
+  }
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <Layout>
+      <div className="p-6 space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-4">Good evening</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {recent.slice(0, 6).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => playQueue(recent, recent.findIndex((x) => x.id === s.id))}
+                className="group flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden text-left transition"
+              >
+                <div className="h-16 w-16 bg-muted shrink-0 overflow-hidden">
+                  {s.thumbnail_url ? (
+                    <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <Music className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 font-semibold truncate pr-2">{s.title}</div>
+                <div className="opacity-0 group-hover:opacity-100 mr-4 h-10 w-10 rounded-full bg-primary flex items-center justify-center transition">
+                  <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {playlists.length > 0 && (
+          <Section title="Your playlists">
+            {playlists.map((p) => (
+              <Link key={p.id} to="/playlist/$id" params={{ id: p.id }} className="block group">
+                <div className="bg-card p-4 rounded-md hover:bg-accent transition">
+                  <div className="aspect-square bg-muted rounded mb-3 overflow-hidden">
+                    {p.cover_url ? (
+                      <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary/40 to-purple-600/40">
+                        <Music className="h-10 w-10 text-white/70" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="font-semibold truncate">{p.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{p.description || "Playlist"}</div>
+                </div>
+              </Link>
+            ))}
+          </Section>
+        )}
+
+        {Object.entries(byGenre).map(([genre, list]) => (
+          <Section key={genre} title={genre}>
+            {list.slice(0, 6).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
+                className="block text-left bg-card p-4 rounded-md hover:bg-accent transition group"
+              >
+                <div className="aspect-square bg-muted rounded mb-3 overflow-hidden relative">
+                  {s.thumbnail_url ? (
+                    <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <Music className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="absolute bottom-2 right-2 h-10 w-10 rounded-full bg-primary opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition flex items-center justify-center shadow-lg">
+                    <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
+                  </div>
+                </div>
+                <div className="font-semibold truncate">{s.title}</div>
+                <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
+              </button>
+            ))}
+          </Section>
+        ))}
+
+        {songs.length === 0 && (
+          <div className="text-center py-16">
+            <Music className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold">No songs yet</h2>
+            <p className="text-muted-foreground mb-4">Head to admin to add your first track.</p>
+            <Link to="/admin" className="text-primary hover:underline">Go to admin →</Link>
+          </div>
+        )}
+      </div>
+    </Layout>
   );
 }
 
-function Index() {
-  return <PlaceholderIndex />;
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-3">{title}</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {children}
+      </div>
+    </div>
+  );
 }
