@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      liked_songs: {
+        Row: {
+          id: string
+          liked_at: string
+          owner_key: string
+          song_id: string
+        }
+        Insert: {
+          id?: string
+          liked_at?: string
+          owner_key: string
+          song_id: string
+        }
+        Update: {
+          id?: string
+          liked_at?: string
+          owner_key?: string
+          song_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "liked_songs_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlist_songs: {
+        Row: {
+          added_at: string
+          id: string
+          playlist_id: string
+          position: number
+          song_id: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          playlist_id: string
+          position?: number
+          song_id: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          playlist_id?: string
+          position?: number
+          song_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_songs_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_songs_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlists: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_key: string
+          updated_at: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_key: string
+          updated_at?: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      songs: {
+        Row: {
+          album: string | null
+          artist: string
+          audio_url: string
+          created_at: string
+          duration: number
+          genre: string | null
+          id: string
+          thumbnail_url: string | null
+          title: string
+        }
+        Insert: {
+          album?: string | null
+          artist: string
+          audio_url: string
+          created_at?: string
+          duration?: number
+          genre?: string | null
+          id?: string
+          thumbnail_url?: string | null
+          title: string
+        }
+        Update: {
+          album?: string | null
+          artist?: string
+          audio_url?: string
+          created_at?: string
+          duration?: number
+          genre?: string | null
+          id?: string
+          thumbnail_url?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
