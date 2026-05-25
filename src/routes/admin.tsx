@@ -1,21 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trash2, Upload, Music } from "lucide-react";
+import { Trash2, Upload, Music, Loader2, FileAudio } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/owner";
+import { getR2UploadUrl, deleteR2Object } from "@/lib/r2-upload.functions";
+import { parseBlob } from "music-metadata";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Wavely — Admin" }] }),
   component: AdminPage,
 });
 
-const ADMIN_PASSWORD = "admin123"; // simple gate; change in code
+const ADMIN_PASSWORD = "admin123";
 const SESSION_KEY = "wavely_admin";
 
 function AdminPage() {
@@ -23,9 +26,7 @@ function AdminPage() {
   useEffect(() => {
     setAuthed(sessionStorage.getItem(SESSION_KEY) === "1");
   }, []);
-
   if (!authed) return <Layout><Gate onPass={() => setAuthed(true)} /></Layout>;
-
   return <Layout><AdminPanel /></Layout>;
 }
 
@@ -43,18 +44,38 @@ function Gate({ onPass }: { onPass: () => void }) {
       }} className="space-y-3">
         <Input type="password" placeholder="Admin password" value={pw} onChange={(e) => setPw(e.target.value)} />
         <Button type="submit" className="w-full">Enter</Button>
-        <p className="text-xs text-muted-foreground">Default password: admin123 (edit in src/routes/admin.tsx)</p>
+        <p className="text-xs text-muted-foreground">Default: admin123 (change in src/routes/admin.tsx)</p>
       </form>
     </div>
   );
 }
 
+type Draft = {
+  file: File | null;
+  title: string;
+  artist: string;
+  album: string;
+  genre: string;
+  duration: number;
+  thumbDataUrl: string | null; // preview
+  thumbBlob: Blob | null;      // upload
+};
+
+const emptyDraft: Draft = {
+  file: null, title: "", artist: "", album: "", genre: "",
+  duration: 0, thumbDataUrl: null, thumbBlob: null,
+};
+
 function AdminPanel() {
   const qc = useQueryClient();
-  const [form, setForm] = useState({
-    title: "", artist: "", album: "", thumbnail_url: "",
-    audio_url: "", duration: 0, genre: "",
-  });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [parsing, setParsing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const getUploadUrl = useServerFn(getR2UploadUrl);
+  const deleteObj = useServerFn(deleteR2Object);
 
   const { data: songs = [] } = useQuery({
     queryKey: ["songs"],
@@ -64,34 +85,121 @@ function AdminPanel() {
     },
   });
 
-  const probeDuration = (url: string) => new Promise<number>((resolve) => {
-    const a = document.createElement("audio");
-    a.src = url;
-    a.addEventListener("loadedmetadata", () => resolve(Math.round(a.duration || 0)));
-    a.addEventListener("error", () => resolve(0));
-  });
-
-  const create = useMutation({
-    mutationFn: async () => {
-      if (!form.title || !form.artist || !form.audio_url) {
-        throw new Error("Title, artist, and audio URL are required");
+  const handleFile = async (file: File) => {
+    setDraft({ ...emptyDraft, file });
+    setParsing(true);
+    try {
+      const meta = await parseBlob(file);
+      const c = meta.common;
+      let thumbDataUrl: string | null = null;
+      let thumbBlob: Blob | null = null;
+      if (c.picture && c.picture[0]) {
+        const pic = c.picture[0];
+        thumbBlob = new Blob([pic.data], { type: pic.format || "image/jpeg" });
+        thumbDataUrl = URL.createObjectURL(thumbBlob);
       }
-      let dur = form.duration;
-      if (!dur) dur = await probeDuration(form.audio_url);
-      const { error } = await supabase.from("songs").insert({ ...form, duration: dur });
+      setDraft({
+        file,
+        title: c.title || file.name.replace(/\.[^.]+$/, ""),
+        artist: c.artist || c.albumartist || "Unknown Artist",
+        album: c.album || "",
+        genre: (c.genre && c.genre[0]) || "",
+        duration: Math.round(meta.format.duration || 0),
+        thumbDataUrl,
+        thumbBlob,
+      });
+    } catch (err) {
+      console.error("Metadata parse failed:", err);
+      // fallback: probe duration via audio element
+      const dur = await new Promise<number>((resolve) => {
+        const a = document.createElement("audio");
+        a.src = URL.createObjectURL(file);
+        a.addEventListener("loadedmetadata", () => resolve(Math.round(a.duration || 0)));
+        a.addEventListener("error", () => resolve(0));
+      });
+      setDraft({
+        ...emptyDraft, file, duration: dur,
+        title: file.name.replace(/\.[^.]+$/, ""),
+        artist: "Unknown Artist",
+      });
+      toast.warning("Couldn't read tags — fill in manually");
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const uploadToR2 = async (blob: Blob, filename: string, contentType: string): Promise<string> => {
+    const { uploadUrl, publicUrl } = await getUploadUrl({
+      data: { filename, contentType },
+    });
+    // Use XHR for progress
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", contentType);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`));
+      xhr.onerror = () => reject(new Error("Network error during upload (check R2 bucket CORS)"));
+      xhr.send(blob);
+    });
+    return publicUrl;
+  };
+
+  const submit = async () => {
+    if (!draft.file) return toast.error("Pick an audio file");
+    if (!draft.title || !draft.artist) return toast.error("Title and artist required");
+    setUploading(true);
+    setProgress(0);
+    try {
+      const audioUrl = await uploadToR2(
+        draft.file,
+        draft.file.name,
+        draft.file.type || "audio/mpeg"
+      );
+      let thumbUrl: string | null = null;
+      if (draft.thumbBlob) {
+        setProgress(0);
+        thumbUrl = await uploadToR2(
+          draft.thumbBlob,
+          `cover-${Date.now()}.${(draft.thumbBlob.type.split("/")[1] || "jpg")}`,
+          draft.thumbBlob.type || "image/jpeg"
+        );
+      }
+      const { error } = await supabase.from("songs").insert({
+        title: draft.title,
+        artist: draft.artist,
+        album: draft.album || null,
+        genre: draft.genre || null,
+        duration: draft.duration,
+        audio_url: audioUrl,
+        thumbnail_url: thumbUrl,
+      });
       if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Song added");
+      toast.success("Song uploaded");
       qc.invalidateQueries({ queryKey: ["songs"] });
-      setForm({ title: "", artist: "", album: "", thumbnail_url: "", audio_url: "", duration: 0, genre: "" });
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
+      setDraft(emptyDraft);
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  };
 
   const del = useMutation({
-    mutationFn: async (id: string) => {
-      await supabase.from("songs").delete().eq("id", id);
+    mutationFn: async (s: any) => {
+      // Delete from R2 (best-effort) if URL matches our R2 public base
+      const r2Pub = (s.audio_url as string).match(/\/songs\/.+$/)?.[0];
+      if (r2Pub) {
+        try { await deleteObj({ data: { key: r2Pub.replace(/^\//, "") } }); } catch {}
+      }
+      await supabase.from("songs").delete().eq("id", s.id);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["songs"] }),
   });
@@ -99,22 +207,103 @@ function AdminPanel() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold mb-4">Add song</h1>
-        <div className="bg-card p-6 rounded-lg space-y-3">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Title*"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
-            <Field label="Artist*"><Input value={form.artist} onChange={(e) => setForm({ ...form, artist: e.target.value })} /></Field>
-            <Field label="Album"><Input value={form.album} onChange={(e) => setForm({ ...form, album: e.target.value })} /></Field>
-            <Field label="Genre"><Input value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} /></Field>
-            <Field label="Thumbnail URL"><Input value={form.thumbnail_url} onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })} placeholder="https://..." /></Field>
-            <Field label="Audio URL (R2)*"><Input value={form.audio_url} onChange={(e) => setForm({ ...form, audio_url: e.target.value })} placeholder="https://cdn.example.com/song.mp3" /></Field>
-            <Field label="Duration (sec, auto-detected if blank)">
-              <Input type="number" value={form.duration || ""} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} />
-            </Field>
+        <h1 className="text-3xl font-bold mb-1">Upload song</h1>
+        <p className="text-sm text-muted-foreground mb-4">
+          Audio uploads go directly to your R2 bucket. Metadata is auto-extracted.
+        </p>
+
+        <div className="bg-card p-6 rounded-lg space-y-4">
+          {/* File picker / dropzone */}
+          <label
+            htmlFor="audio-file"
+            className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 transition"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+          >
+            <FileAudio className="h-10 w-10 text-muted-foreground" />
+            <div className="text-sm">
+              {draft.file ? (
+                <span className="font-medium">{draft.file.name}</span>
+              ) : (
+                <>Drop audio file or <span className="text-primary underline">browse</span></>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">MP3, M4A, WAV, FLAC, OGG…</div>
+            <input
+              id="audio-file"
+              ref={fileRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
+          </label>
+
+          {parsing && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Extracting metadata…
+            </div>
+          )}
+
+          {draft.file && !parsing && (
+            <div className="flex gap-4">
+              <div className="h-32 w-32 rounded bg-muted overflow-hidden flex items-center justify-center shrink-0">
+                {draft.thumbDataUrl ? (
+                  <img src={draft.thumbDataUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Music className="h-10 w-10 text-muted-foreground" />
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                <Field label="Title"><Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></Field>
+                <Field label="Artist"><Input value={draft.artist} onChange={(e) => setDraft({ ...draft, artist: e.target.value })} /></Field>
+                <Field label="Album"><Input value={draft.album} onChange={(e) => setDraft({ ...draft, album: e.target.value })} /></Field>
+                <Field label="Genre"><Input value={draft.genre} onChange={(e) => setDraft({ ...draft, genre: e.target.value })} /></Field>
+                <Field label={`Duration (${formatDuration(draft.duration)})`}>
+                  <Input type="number" value={draft.duration} onChange={(e) => setDraft({ ...draft, duration: Number(e.target.value) })} />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {uploading && (
+            <div className="space-y-1">
+              <div className="h-2 bg-muted rounded overflow-hidden">
+                <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="text-xs text-muted-foreground">Uploading to R2… {progress}%</div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button onClick={submit} disabled={!draft.file || uploading || parsing}>
+              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              {uploading ? "Uploading…" : "Upload to R2 & save"}
+            </Button>
+            {draft.file && !uploading && (
+              <Button variant="ghost" onClick={() => { setDraft(emptyDraft); if (fileRef.current) fileRef.current.value = ""; }}>
+                Clear
+              </Button>
+            )}
           </div>
-          <Button onClick={() => create.mutate()} disabled={create.isPending}>
-            <Upload className="h-4 w-4 mr-2" />{create.isPending ? "Adding…" : "Add song"}
-          </Button>
+
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">⚠️ R2 bucket needs CORS configured (one-time)</summary>
+            <pre className="mt-2 p-3 bg-background rounded overflow-auto">{`[
+  {
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]`}</pre>
+            <p className="mt-2">Cloudflare Dashboard → R2 → your bucket → Settings → CORS Policy. Paste the JSON above. For production, replace <code>*</code> with your domain.</p>
+          </details>
         </div>
       </div>
 
@@ -131,7 +320,7 @@ function AdminPanel() {
                 <div className="text-xs text-muted-foreground truncate">{s.artist} · {s.album || "—"} · {s.genre || "—"}</div>
               </div>
               <div className="text-xs text-muted-foreground">{formatDuration(s.duration)}</div>
-              <Button size="icon" variant="ghost" onClick={() => del.mutate(s.id)}>
+              <Button size="icon" variant="ghost" onClick={() => del.mutate(s)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
