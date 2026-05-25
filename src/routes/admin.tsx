@@ -96,7 +96,7 @@ function AdminPanel() {
       let thumbBlob: Blob | null = null;
       if (c.picture && c.picture[0]) {
         const pic = c.picture[0];
-        thumbBlob = new Blob([pic.data], { type: pic.format || "image/jpeg" });
+        thumbBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format || "image/jpeg" });
         thumbDataUrl = URL.createObjectURL(thumbBlob);
       }
       setDraft({
