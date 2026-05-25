@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Trash2, Upload, Music, Loader2, FileAudio } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/owner";
-import { getR2UploadUrl, deleteR2Object } from "@/lib/r2-upload.functions";
+import { getR2UploadUrl, deleteR2Object, extractR2Metadata } from "@/lib/r2-upload.functions";
 import { parseBlob } from "music-metadata";
 
 export const Route = createFileRoute("/admin")({
@@ -76,6 +76,7 @@ function AdminPanel() {
 
   const getUploadUrl = useServerFn(getR2UploadUrl);
   const deleteObj = useServerFn(deleteR2Object);
+  const extractMeta = useServerFn(extractR2Metadata);
 
   const { data: songs = [] } = useQuery({
     queryKey: ["songs"],
@@ -170,12 +171,26 @@ function AdminPanel() {
           draft.thumbBlob.type || "image/jpeg"
         );
       }
+      // Server-side metadata extraction as a fallback so duration (and other
+      // tags) is always correct, even if client-side parsing failed.
+      let serverMeta: Awaited<ReturnType<typeof extractMeta>> | null = null;
+      try {
+        serverMeta = await extractMeta({ data: { url: audioUrl } });
+      } catch (e) {
+        console.warn("Server metadata fallback failed", e);
+      }
+      const duration =
+        draft.duration > 0
+          ? draft.duration
+          : serverMeta?.duration && serverMeta.duration > 0
+            ? serverMeta.duration
+            : 0;
       const { error } = await supabase.from("songs").insert({
-        title: draft.title,
-        artist: draft.artist,
-        album: draft.album || null,
-        genre: draft.genre || null,
-        duration: draft.duration,
+        title: draft.title || serverMeta?.title || draft.file.name.replace(/\.[^.]+$/, ""),
+        artist: draft.artist || serverMeta?.artist || "Unknown Artist",
+        album: draft.album || serverMeta?.album || null,
+        genre: draft.genre || serverMeta?.genre || null,
+        duration,
         audio_url: audioUrl,
         thumbnail_url: thumbUrl,
       });

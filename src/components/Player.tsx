@@ -31,6 +31,7 @@ export function Player() {
     if (!audio || !song) return;
     if (audio.src !== song.audio_url) {
       audio.src = song.audio_url;
+      audio.currentTime = 0;
     }
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
