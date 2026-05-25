@@ -72,3 +72,34 @@ export const deleteR2Object = createServerFn({ method: "POST" })
     );
     return { ok: res.ok };
   });
+
+// Server-side metadata extraction fallback. Fetches the uploaded audio from
+// its public R2 URL and parses ID3/container tags + duration with
+// music-metadata. Returns null fields if parsing fails so the caller can
+// merge with whatever the client extracted.
+export const extractR2Metadata = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z.object({ url: z.string().url() }).parse(input)
+  )
+  .handler(async ({ data }) => {
+    try {
+      const { parseWebStream } = await import("music-metadata");
+      const res = await fetch(data.url);
+      if (!res.ok || !res.body) {
+        return { duration: 0, genre: null, title: null, artist: null, album: null };
+      }
+      const size = Number(res.headers.get("content-length") || 0) || undefined;
+      const mimeType = res.headers.get("content-type") || undefined;
+      const meta = await parseWebStream(res.body, { size, mimeType });
+      return {
+        duration: Math.round(meta.format.duration || 0),
+        genre: (meta.common.genre && meta.common.genre[0]) || null,
+        title: meta.common.title || null,
+        artist: meta.common.artist || meta.common.albumartist || null,
+        album: meta.common.album || null,
+      };
+    } catch (err) {
+      console.error("Server metadata extraction failed:", err);
+      return { duration: 0, genre: null, title: null, artist: null, album: null };
+    }
+  });
