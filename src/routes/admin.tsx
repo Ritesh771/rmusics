@@ -18,7 +18,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_PASSWORD = "R771@2026";
 const SESSION_KEY = "wavely_admin";
 
 function AdminPage() {
@@ -44,7 +44,6 @@ function Gate({ onPass }: { onPass: () => void }) {
       }} className="space-y-3">
         <Input type="password" placeholder="Admin password" value={pw} onChange={(e) => setPw(e.target.value)} />
         <Button type="submit" className="w-full">Enter</Button>
-        <p className="text-xs text-muted-foreground">Default: admin123 (change in src/routes/admin.tsx)</p>
       </form>
     </div>
   );
