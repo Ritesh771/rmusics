@@ -386,6 +386,21 @@ function AdminPanel() {
                       </div>
                     )}
                     {it.error && <div className="text-xs text-destructive">{it.error}</div>}
+                    {it.status === "duplicate" && it.duplicateOf && (
+                      <div className="flex items-center justify-between gap-2 text-xs bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
+                        <div className="flex items-center gap-2 text-yellow-500 min-w-0">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">
+                            Already {it.duplicateOf.source === "library" ? "in library" : "in this queue"}:
+                            <span className="font-medium"> {it.duplicateOf.title}</span> — {it.duplicateOf.artist}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs"
+                          onClick={() => updateItem(it.id, { status: "ready", duplicateOf: undefined })}>
+                          Upload anyway
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
