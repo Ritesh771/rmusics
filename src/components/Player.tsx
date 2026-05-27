@@ -85,7 +85,7 @@ export function Player() {
   });
 
   return (
-    <div className="h-20 bg-black border-t border-border px-4 flex items-center gap-4">
+    <>
       <audio
         ref={audioRef}
         onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
@@ -97,6 +97,45 @@ export function Player() {
           } else next();
         }}
       />
+
+      {/* MOBILE compact player — Spotify-style bar above the bottom tab nav */}
+      {song && (
+        <div
+          onClick={openNowPlaying}
+          className="md:hidden fixed left-2 right-2 bottom-16 h-14 z-40 bg-neutral-800 rounded-md shadow-lg flex items-center gap-2 pl-2 pr-3 overflow-hidden"
+        >
+          <div className="h-10 w-10 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+            {song.thumbnail_url ? (
+              <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Music className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate text-white">{song.title}</div>
+            <div className="text-xs text-white/60 truncate">{song.artist}</div>
+          </div>
+          <Button
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            onClick={(e) => { e.stopPropagation(); toggleLike.mutate(); }}
+          >
+            <Heart className={isLiked ? "h-5 w-5 fill-primary text-primary" : "h-5 w-5"} />
+          </Button>
+          <Button
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+          >
+            {isPlaying ? <Pause className="h-5 w-5 fill-white" /> : <Play className="h-5 w-5 fill-white" />}
+          </Button>
+          {/* progress hair-line */}
+          <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-white/10">
+            <div className="h-full bg-white transition-all" style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* DESKTOP full player bar */}
+      <div className="hidden md:flex h-20 bg-black border-t border-border px-4 items-center gap-4">
       {/* Song info */}
       <div className="flex items-center gap-3 w-1/4 min-w-0">
         {song && (
@@ -195,6 +234,7 @@ export function Player() {
           className="w-24"
         />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

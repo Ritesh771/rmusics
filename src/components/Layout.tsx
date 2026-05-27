@@ -46,14 +46,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="h-screen flex flex-col bg-black overflow-hidden">
       <div className="flex-1 flex min-h-0">
         <Sidebar />
-        <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-20 md:pb-2">
+        <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-36 md:pb-2">
           {children}
         </main>
       </div>
       <Player />
       <NowPlaying />
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-20 left-0 right-0 bg-card border-t border-border flex justify-around py-2 z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-black border-t border-border flex justify-around items-center z-50">
         {mobileNav.map((it) => (
           <Link
             key={it.to}

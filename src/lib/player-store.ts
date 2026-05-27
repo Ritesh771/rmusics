@@ -45,6 +45,8 @@ type PlayerState = {
   clearSeek: () => void;
   setSleepTimer: (minutes: number | null) => void;
   currentSong: () => Song | null;
+  addToQueue: (song: Song) => void;
+  playNext: (song: Song) => void;
 };
 
 function shuffleArr<T>(arr: T[], keepIndex: number): T[] {
@@ -143,4 +145,25 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   clearSeek: () => set({ _seekTarget: null }),
   setSleepTimer: (minutes) =>
     set({ sleepTimer: minutes == null ? null : Date.now() + minutes * 60_000 }),
+  addToQueue: (song) => {
+    const { queue, originalQueue, currentIndex } = get();
+    if (!queue.length) {
+      set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0 });
+      return;
+    }
+    set({ queue: [...queue, song], originalQueue: [...originalQueue, song] });
+  },
+  playNext: (song) => {
+    const { queue, originalQueue, currentIndex } = get();
+    if (!queue.length) {
+      set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0 });
+      return;
+    }
+    const insertAt = currentIndex + 1;
+    const nq = [...queue];
+    nq.splice(insertAt, 0, song);
+    const noq = [...originalQueue];
+    noq.splice(insertAt, 0, song);
+    set({ queue: nq, originalQueue: noq });
+  },
 }));
