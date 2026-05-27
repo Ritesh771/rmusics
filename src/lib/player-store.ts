@@ -45,6 +45,8 @@ type PlayerState = {
   clearSeek: () => void;
   setSleepTimer: (minutes: number | null) => void;
   currentSong: () => Song | null;
+  addToQueue: (song: Song) => void;
+  playNext: (song: Song) => void;
 };
 
 function shuffleArr<T>(arr: T[], keepIndex: number): T[] {
