@@ -19,7 +19,7 @@ export function Player() {
     isPlaying, volume, muted, progress, duration, shuffle, repeat,
     _seekTarget, sleepTimer, togglePlay, next, prev, setVolume, toggleMute,
     setProgress, setDuration, toggleShuffle, cycleRepeat, seek, clearSeek,
-    setSleepTimer, currentSong,
+    setSleepTimer, currentSong, openNowPlaying,
   } = usePlayer();
   const song = currentSong();
   const qc = useQueryClient();
@@ -101,17 +101,21 @@ export function Player() {
       <div className="flex items-center gap-3 w-1/4 min-w-0">
         {song && (
           <>
-            <div className="h-14 w-14 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+            <button
+              onClick={openNowPlaying}
+              className="h-14 w-14 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center hover:opacity-90"
+              aria-label="Open now playing"
+            >
               {song.thumbnail_url ? (
                 <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
               ) : (
                 <Music className="h-6 w-6 text-muted-foreground" />
               )}
-            </div>
-            <div className="min-w-0 hidden sm:block">
+            </button>
+            <button onClick={openNowPlaying} className="min-w-0 hidden sm:block text-left hover:underline">
               <div className="text-sm font-medium truncate">{song.title}</div>
               <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
-            </div>
+            </button>
             <Button
               size="icon" variant="ghost" className="h-8 w-8 shrink-0"
               onClick={() => toggleLike.mutate()}
