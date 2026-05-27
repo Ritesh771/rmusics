@@ -330,7 +330,7 @@ function AdminPanel() {
           {queue.length > 0 && (
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                {queue.length} file{queue.length === 1 ? "" : "s"} · {readyCount} ready · {queue.filter((q) => q.status === "done").length} uploaded
+                {queue.length} file{queue.length === 1 ? "" : "s"} · {readyCount} ready · {dupCount} duplicate · {queue.filter((q) => q.status === "done").length} uploaded
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" onClick={clearDone} disabled={bulkRunning}>Clear done</Button>
