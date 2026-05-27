@@ -1,14 +1,10 @@
-import { Play, Pause, Heart, MoreHorizontal, Plus, Share2, Trash2 } from "lucide-react";
+import { Play, Pause, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePlayer, type Song } from "@/lib/player-store";
 import { formatDuration, getOwnerKey } from "@/lib/owner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub,
-  DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuTrigger, DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { SongMenu } from "./SongMenu";
 
 type Props = {
   song: Song;
@@ -24,15 +20,6 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
   const isCurrent = cur?.id === song.id;
   const qc = useQueryClient();
   const owner = typeof window !== "undefined" ? getOwnerKey() : "";
-
-  const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", owner],
-    queryFn: async () => {
-      const { data } = await supabase.from("playlists").select("id, name").eq("owner_key", owner);
-      return data ?? [];
-    },
-    enabled: !!owner,
-  });
 
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", owner],
@@ -53,32 +40,6 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
-  });
-
-  const addToPlaylist = useMutation({
-    mutationFn: async (playlistId: string) => {
-      await supabase.from("playlist_songs").insert({
-        playlist_id: playlistId,
-        song_id: song.id,
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["playlist"] });
-      toast.success("Added to playlist");
-    },
-    onError: () => toast.error("Already in playlist"),
-  });
-
-  const removeFromPlaylist = useMutation({
-    mutationFn: async () => {
-      if (!inPlaylistId) return;
-      await supabase.from("playlist_songs").delete()
-        .eq("playlist_id", inPlaylistId).eq("song_id", song.id);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["playlist", inPlaylistId] });
-      toast.success("Removed from playlist");
-    },
   });
 
   const handlePlay = () => {
@@ -113,47 +74,11 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
       </div>
       <div className="flex items-center gap-2 text-sm text-muted-foreground justify-end">
         <span>{formatDuration(song.duration)}</span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-8 w-8 opacity-0 group-hover:opacity-100">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Plus className="h-4 w-4 mr-2" />Add to playlist
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {playlists.length === 0 && (
-                  <DropdownMenuItem disabled>No playlists yet</DropdownMenuItem>
-                )}
-                {playlists.map((p) => (
-                  <DropdownMenuItem key={p.id} onClick={() => addToPlaylist.mutate(p.id)}>
-                    {p.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onClick={() => toggleLike.mutate()}>
-              <Heart className="h-4 w-4 mr-2" />{isLiked ? "Unlike" : "Like"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {
-              navigator.clipboard.writeText(`${window.location.origin}/song/${song.id}`);
-              toast.success("Link copied");
-            }}>
-              <Share2 className="h-4 w-4 mr-2" />Share
-            </DropdownMenuItem>
-            {inPlaylistId && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => removeFromPlaylist.mutate()} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />Remove from playlist
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <SongMenu
+          song={song}
+          inPlaylistId={inPlaylistId}
+          className="opacity-0 group-hover:opacity-100 md:opacity-0 [@media(hover:none)]:opacity-100"
+        />
       </div>
     </div>
   );
