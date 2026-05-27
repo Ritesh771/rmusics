@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
+import { SongMenu } from "@/components/SongMenu";
 import type { Song } from "@/lib/player-store";
 import { usePlayer } from "@/lib/player-store";
-import { Play, Music } from "lucide-react";
+import { Play, Music, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { getOwnerKey } from "@/lib/owner";
 
@@ -50,11 +52,11 @@ function HomePage() {
           <h1 className="text-3xl font-bold mb-4">Good evening</h1>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recent.slice(0, 6).map((s) => (
-              <button
-                key={s.id}
-                onClick={() => playQueue(recent, recent.findIndex((x) => x.id === s.id))}
-                className="group flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden text-left transition"
-              >
+              <div key={s.id} className="group relative flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden transition">
+                <button
+                  onClick={() => playQueue(recent, recent.findIndex((x) => x.id === s.id))}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                >
                 <div className="h-16 w-16 bg-muted shrink-0 overflow-hidden">
                   {s.thumbnail_url ? (
                     <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
@@ -65,10 +67,16 @@ function HomePage() {
                   )}
                 </div>
                 <div className="flex-1 font-semibold truncate pr-2">{s.title}</div>
-                <div className="opacity-0 group-hover:opacity-100 mr-4 h-10 w-10 rounded-full bg-primary flex items-center justify-center transition">
-                  <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
-                </div>
-              </button>
+                </button>
+                <SongMenu
+                  song={s}
+                  trigger={
+                    <Button size="icon" variant="ghost" className="h-8 w-8 mr-2 shrink-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -98,11 +106,11 @@ function HomePage() {
         {Object.entries(byGenre).map(([genre, list]) => (
           <Section key={genre} title={genre}>
             {list.slice(0, 6).map((s) => (
-              <button
-                key={s.id}
-                onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
-                className="block text-left bg-card p-4 rounded-md hover:bg-accent transition group"
-              >
+              <div key={s.id} className="relative bg-card p-4 rounded-md hover:bg-accent transition group">
+                <button
+                  onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
+                  className="block text-left w-full"
+                >
                 <div className="aspect-square bg-muted rounded mb-3 overflow-hidden relative">
                   {s.thumbnail_url ? (
                     <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
@@ -117,7 +125,18 @@ function HomePage() {
                 </div>
                 <div className="font-semibold truncate">{s.title}</div>
                 <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
-              </button>
+                </button>
+                <div className="absolute top-2 right-2">
+                  <SongMenu
+                    song={s}
+                    trigger={
+                      <Button size="icon" variant="ghost" className="h-8 w-8 bg-background/70 backdrop-blur hover:bg-background">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                </div>
+              </div>
             ))}
           </Section>
         ))}
