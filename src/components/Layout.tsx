@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { Player } from "./Player";
+import { NowPlaying } from "./NowPlaying";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,6 +51,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <Player />
+      <NowPlaying />
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-20 left-0 right-0 bg-card border-t border-border flex justify-around py-2 z-50">
         {mobileNav.map((it) => (
