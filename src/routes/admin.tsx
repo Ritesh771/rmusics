@@ -437,6 +437,7 @@ function StatusBadge({ status }: { status: QueueStatus }) {
     pending:   { label: "Pending",    cls: "bg-muted text-muted-foreground" },
     parsing:   { label: "Parsing",    cls: "bg-muted text-muted-foreground" },
     ready:     { label: "Ready",      cls: "bg-primary/20 text-primary" },
+    duplicate: { label: "Duplicate",  cls: "bg-yellow-500/20 text-yellow-500" },
     uploading: { label: "Uploading",  cls: "bg-primary/30 text-primary" },
     done:      { label: "Uploaded",   cls: "bg-green-500/20 text-green-500" },
     error:     { label: "Error",      cls: "bg-destructive/20 text-destructive" },
