@@ -25,6 +25,10 @@ type PlayerState = {
   shuffle: boolean;
   repeat: RepeatMode;
   sleepTimer: number | null; // ms epoch when stop
+  nowPlayingOpen: boolean;
+  openNowPlaying: () => void;
+  closeNowPlaying: () => void;
+  toggleNowPlaying: () => void;
   playQueue: (songs: Song[], startIndex?: number) => void;
   playSong: (song: Song) => void;
   togglePlay: () => void;
@@ -66,6 +70,10 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   repeat: "off",
   sleepTimer: null,
   _seekTarget: null,
+  nowPlayingOpen: false,
+  openNowPlaying: () => set({ nowPlayingOpen: true }),
+  closeNowPlaying: () => set({ nowPlayingOpen: false }),
+  toggleNowPlaying: () => set((s) => ({ nowPlayingOpen: !s.nowPlayingOpen })),
   currentSong: () => {
     const { queue, currentIndex } = get();
     return queue[currentIndex] ?? null;

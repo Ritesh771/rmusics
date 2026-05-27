@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Upload, Music, Loader2, FileAudio } from "lucide-react";
+import { Trash2, Upload, Music, Loader2, FileAudio, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/owner";
 import { getR2UploadUrl, deleteR2Object, extractR2Metadata } from "@/lib/r2-upload.functions";
@@ -48,7 +48,7 @@ function Gate({ onPass }: { onPass: () => void }) {
   );
 }
 
-type QueueStatus = "pending" | "parsing" | "ready" | "uploading" | "done" | "error";
+type QueueStatus = "pending" | "parsing" | "ready" | "duplicate" | "uploading" | "done" | "error";
 
 type QueueItem = {
   id: string;
@@ -63,6 +63,7 @@ type QueueItem = {
   status: QueueStatus;
   progress: number;
   error?: string;
+  duplicateOf?: { id?: string; title: string; artist: string; source: "library" | "queue" };
 };
 
 function AdminPanel() {
@@ -86,6 +87,27 @@ function AdminPanel() {
   const updateItem = (id: string, patch: Partial<QueueItem>) =>
     setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...patch } : it)));
 
+  const normKey = (title: string, artist: string) =>
+    `${title.trim().toLowerCase()}::${artist.trim().toLowerCase()}`;
+
+  const checkDuplicate = (
+    title: string,
+    artist: string,
+    selfId: string,
+    currentQueue: QueueItem[],
+    library: any[],
+  ): QueueItem["duplicateOf"] | null => {
+    const key = normKey(title, artist);
+    if (!title || !artist) return null;
+    const inLib = library.find((s) => normKey(s.title, s.artist) === key);
+    if (inLib) return { id: inLib.id, title: inLib.title, artist: inLib.artist, source: "library" };
+    const inQueue = currentQueue.find(
+      (it) => it.id !== selfId && it.status !== "duplicate" && normKey(it.title, it.artist) === key,
+    );
+    if (inQueue) return { title: inQueue.title, artist: inQueue.artist, source: "queue" };
+    return null;
+  };
+
   const parseOne = async (item: QueueItem) => {
     updateItem(item.id, { status: "parsing" });
     try {
@@ -98,9 +120,11 @@ function AdminPanel() {
         thumbBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format || "image/jpeg" });
         thumbDataUrl = URL.createObjectURL(thumbBlob);
       }
+      const title = c.title || item.file.name.replace(/\.[^.]+$/, "");
+      const artist = c.artist || c.albumartist || "Unknown Artist";
       updateItem(item.id, {
-        title: c.title || item.file.name.replace(/\.[^.]+$/, ""),
-        artist: c.artist || c.albumartist || "Unknown Artist",
+        title,
+        artist,
         album: c.album || "",
         genre: (c.genre && c.genre[0]) || "",
         duration: Math.round(meta.format.duration || 0),
@@ -144,6 +168,19 @@ function AdminPanel() {
     setQueue((q) => [...q, ...items]);
     // Parse all in parallel (fast, client-side)
     await Promise.all(items.map((it) => parseOne(it)));
+    // Now run duplicate detection against library + queue
+    setQueue((q) => {
+      const next = [...q];
+      for (const it of next) {
+        if (it.status !== "ready") continue;
+        const dup = checkDuplicate(it.title, it.artist, it.id, next, songs);
+        if (dup) {
+          const idx = next.findIndex((x) => x.id === it.id);
+          next[idx] = { ...it, status: "duplicate", duplicateOf: dup };
+        }
+      }
+      return next;
+    });
   };
 
   const uploadBlob = (uploadUrl: string, blob: Blob, contentType: string, onProgress?: (p: number) => void) =>
@@ -212,7 +249,7 @@ function AdminPanel() {
   const uploadAll = async () => {
     setBulkRunning(true);
     try {
-      // Sequential to be gentle on R2 / bandwidth
+      // Sequential to be gentle on R2 / bandwidth. Duplicates are skipped — user must explicitly override.
       const snapshot = queue.filter((it) => it.status === "ready" || it.status === "error");
       for (const it of snapshot) {
         // re-read latest from state via closure-safe lookup
@@ -251,6 +288,7 @@ function AdminPanel() {
   });
 
   const readyCount = queue.filter((q) => q.status === "ready" || q.status === "error").length;
+  const dupCount = queue.filter((q) => q.status === "duplicate").length;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -292,7 +330,7 @@ function AdminPanel() {
           {queue.length > 0 && (
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                {queue.length} file{queue.length === 1 ? "" : "s"} · {readyCount} ready · {queue.filter((q) => q.status === "done").length} uploaded
+                {queue.length} file{queue.length === 1 ? "" : "s"} · {readyCount} ready · {dupCount} duplicate · {queue.filter((q) => q.status === "done").length} uploaded
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" onClick={clearDone} disabled={bulkRunning}>Clear done</Button>
@@ -348,6 +386,21 @@ function AdminPanel() {
                       </div>
                     )}
                     {it.error && <div className="text-xs text-destructive">{it.error}</div>}
+                    {it.status === "duplicate" && it.duplicateOf && (
+                      <div className="flex items-center justify-between gap-2 text-xs bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
+                        <div className="flex items-center gap-2 text-yellow-500 min-w-0">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">
+                            Already {it.duplicateOf.source === "library" ? "in library" : "in this queue"}:
+                            <span className="font-medium"> {it.duplicateOf.title}</span> — {it.duplicateOf.artist}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs"
+                          onClick={() => updateItem(it.id, { status: "ready", duplicateOf: undefined })}>
+                          Upload anyway
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -399,6 +452,7 @@ function StatusBadge({ status }: { status: QueueStatus }) {
     pending:   { label: "Pending",    cls: "bg-muted text-muted-foreground" },
     parsing:   { label: "Parsing",    cls: "bg-muted text-muted-foreground" },
     ready:     { label: "Ready",      cls: "bg-primary/20 text-primary" },
+    duplicate: { label: "Duplicate",  cls: "bg-yellow-500/20 text-yellow-500" },
     uploading: { label: "Uploading",  cls: "bg-primary/30 text-primary" },
     done:      { label: "Uploaded",   cls: "bg-green-500/20 text-green-500" },
     error:     { label: "Error",      cls: "bg-destructive/20 text-destructive" },
