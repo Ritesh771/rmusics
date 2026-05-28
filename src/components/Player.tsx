@@ -6,9 +6,11 @@ import {
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { formatDuration, getOwnerKey } from "@/lib/owner";
+import { formatDuration } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ListMusic } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -19,11 +21,11 @@ export function Player() {
     isPlaying, volume, muted, progress, duration, shuffle, repeat,
     _seekTarget, sleepTimer, togglePlay, next, prev, setVolume, toggleMute,
     setProgress, setDuration, toggleShuffle, cycleRepeat, seek, clearSeek,
-    setSleepTimer, currentSong, openNowPlaying,
+    setSleepTimer, currentSong, openNowPlaying, toggleQueuePanel,
   } = usePlayer();
   const song = currentSong();
   const qc = useQueryClient();
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
 
   // Audio src/play control
   useEffect(() => {
@@ -63,22 +65,22 @@ export function Player() {
 
   // Liked songs
   const { data: liked = [] } = useQuery({
-    queryKey: ["liked", owner],
+    queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id").eq("owner_key", owner);
+      const { data } = await supabase.from("liked_songs").select("song_id");
       return data?.map((r) => r.song_id) ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
   const isLiked = song ? liked.includes(song.id) : false;
 
   const toggleLike = useMutation({
     mutationFn: async () => {
-      if (!song) return;
+      if (!song || !user) return;
       if (isLiked) {
-        await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("owner_key", owner);
+        await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("user_id", user.id);
       } else {
-        await supabase.from("liked_songs").insert({ song_id: song.id, owner_key: owner });
+        await supabase.from("liked_songs").insert({ song_id: song.id, user_id: user.id });
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
@@ -233,6 +235,9 @@ export function Player() {
           onValueChange={(v) => setVolume(v[0] / 100)}
           className="w-24"
         />
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleQueuePanel} title="Queue">
+          <ListMusic className="h-4 w-4" />
+        </Button>
       </div>
       </div>
     </>

@@ -5,7 +5,7 @@ import {
   DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { usePlayer, type Song } from "@/lib/player-store";
-import { getOwnerKey } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,31 +23,32 @@ type Props = {
 export function SongMenu({ song, inPlaylistId, trigger, align = "end", className }: Props) {
   const { addToQueue, playNext } = usePlayer();
   const qc = useQueryClient();
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
 
   const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", owner],
+    queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("playlists").select("id, name").eq("owner_key", owner);
+      const { data } = await supabase.from("playlists").select("id, name").eq("user_id", user!.id);
       return data ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
 
   const { data: liked = [] } = useQuery({
-    queryKey: ["liked", owner],
+    queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id").eq("owner_key", owner);
+      const { data } = await supabase.from("liked_songs").select("song_id");
       return data?.map((r) => r.song_id) ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
   const isLiked = liked.includes(song.id);
 
   const toggleLike = useMutation({
     mutationFn: async () => {
-      if (isLiked) await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("owner_key", owner);
-      else await supabase.from("liked_songs").insert({ song_id: song.id, owner_key: owner });
+      if (!user) return;
+      if (isLiked) await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("user_id", user.id);
+      else await supabase.from("liked_songs").insert({ song_id: song.id, user_id: user.id });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });

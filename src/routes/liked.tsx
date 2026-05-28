@@ -6,7 +6,7 @@ import { SongRow } from "@/components/SongRow";
 import { Heart, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePlayer, type Song } from "@/lib/player-store";
-import { getOwnerKey } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/liked")({
   head: () => ({ meta: [{ title: "Wavely — Liked" }] }),
@@ -14,19 +14,18 @@ export const Route = createFileRoute("/liked")({
 });
 
 function LikedPage() {
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
   const { playQueue } = usePlayer();
   const { data: songs = [] } = useQuery({
-    queryKey: ["liked", "songs", owner],
+    queryKey: ["liked", "songs", user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("liked_songs")
         .select("song_id, liked_at, songs(*)")
-        .eq("owner_key", owner)
         .order("liked_at", { ascending: false });
       return (data ?? []).map((r: any) => r.songs as Song).filter(Boolean);
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
 
   return (

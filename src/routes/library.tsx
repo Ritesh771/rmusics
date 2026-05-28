@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { Music, Heart } from "lucide-react";
-import { getOwnerKey } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/library")({
   head: () => ({ meta: [{ title: "Wavely — Library" }] }),
@@ -11,14 +11,14 @@ export const Route = createFileRoute("/library")({
 });
 
 function LibraryPage() {
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
   const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", owner],
+    queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("playlists").select("*").order("updated_at", { ascending: false });
+      const { data } = await supabase.from("playlists").select("*").eq("user_id", user!.id).order("updated_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
 
   return (
