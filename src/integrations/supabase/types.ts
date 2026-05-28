@@ -18,20 +18,20 @@ export type Database = {
         Row: {
           id: string
           liked_at: string
-          owner_key: string
           song_id: string
+          user_id: string
         }
         Insert: {
           id?: string
           liked_at?: string
-          owner_key: string
           song_id: string
+          user_id: string
         }
         Update: {
           id?: string
           liked_at?: string
-          owner_key?: string
           song_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -88,29 +88,88 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_public: boolean
           name: string
-          owner_key: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           cover_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          is_public?: boolean
           name: string
-          owner_key: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           cover_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          is_public?: boolean
           name?: string
-          owner_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      recently_played: {
+        Row: {
+          id: string
+          played_at: string
+          song_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          played_at?: string
+          song_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          played_at?: string
+          song_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recently_played_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       songs: {
         Row: {
@@ -145,6 +204,39 @@ export type Database = {
           id?: string
           thumbnail_url?: string | null
           title?: string
+        }
+        Relationships: []
+      }
+      user_queue: {
+        Row: {
+          current_index: number
+          progress: number
+          queue: Json
+          repeat: string
+          shuffle: boolean
+          sleep_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_index?: number
+          progress?: number
+          queue?: Json
+          repeat?: string
+          shuffle?: boolean
+          sleep_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_index?: number
+          progress?: number
+          queue?: Json
+          repeat?: string
+          shuffle?: boolean
+          sleep_until?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
