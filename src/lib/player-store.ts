@@ -1,4 +1,17 @@
 import { create } from "zustand";
+import { supabase } from "@/integrations/supabase/client";
+
+let _lastPlayedId: string | null = null;
+async function recordPlay(song: Song | undefined) {
+  if (!song || typeof window === "undefined") return;
+  if (_lastPlayedId === song.id) return;
+  _lastPlayedId = song.id;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("recently_played").insert({ song_id: song.id, user_id: user.id });
+  } catch {}
+}
 
 export type Song = {
   id: string;
@@ -97,9 +110,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const q = shuffle ? shuffleArr(songs, startIndex) : songs;
     const idx = shuffle ? 0 : startIndex;
     set({ queue: q, originalQueue: songs, currentIndex: idx, isPlaying: true, progress: 0 });
+    void recordPlay(q[idx]);
   },
   playSong: (song) => {
     set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0 });
+    void recordPlay(song);
   },
   togglePlay: () => {
     const { currentIndex } = get();
@@ -115,6 +130,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       return;
     }
     set({ currentIndex: currentIndex + 1, isPlaying: true, progress: 0 });
+    void recordPlay(get().queue[get().currentIndex]);
   },
   prev: () => {
     const { currentIndex, progress } = get();
