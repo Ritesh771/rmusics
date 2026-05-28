@@ -26,9 +26,13 @@ type PlayerState = {
   repeat: RepeatMode;
   sleepTimer: number | null; // ms epoch when stop
   nowPlayingOpen: boolean;
+  queuePanelOpen: boolean;
   openNowPlaying: () => void;
   closeNowPlaying: () => void;
   toggleNowPlaying: () => void;
+  openQueuePanel: () => void;
+  closeQueuePanel: () => void;
+  toggleQueuePanel: () => void;
   playQueue: (songs: Song[], startIndex?: number) => void;
   playSong: (song: Song) => void;
   togglePlay: () => void;
@@ -47,6 +51,9 @@ type PlayerState = {
   currentSong: () => Song | null;
   addToQueue: (song: Song) => void;
   playNext: (song: Song) => void;
+  removeFromQueue: (index: number) => void;
+  reorderQueue: (from: number, to: number) => void;
+  hydrate: (state: Partial<PlayerState>) => void;
 };
 
 function shuffleArr<T>(arr: T[], keepIndex: number): T[] {
@@ -73,9 +80,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   sleepTimer: null,
   _seekTarget: null,
   nowPlayingOpen: false,
+  queuePanelOpen: false,
   openNowPlaying: () => set({ nowPlayingOpen: true }),
   closeNowPlaying: () => set({ nowPlayingOpen: false }),
   toggleNowPlaying: () => set((s) => ({ nowPlayingOpen: !s.nowPlayingOpen })),
+  openQueuePanel: () => set({ queuePanelOpen: true }),
+  closeQueuePanel: () => set({ queuePanelOpen: false }),
+  toggleQueuePanel: () => set((s) => ({ queuePanelOpen: !s.queuePanelOpen })),
   currentSong: () => {
     const { queue, currentIndex } = get();
     return queue[currentIndex] ?? null;
@@ -166,4 +177,32 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     noq.splice(insertAt, 0, song);
     set({ queue: nq, originalQueue: noq });
   },
+  removeFromQueue: (index) => {
+    const { queue, currentIndex } = get();
+    if (index < 0 || index >= queue.length) return;
+    const nq = queue.filter((_, i) => i !== index);
+    let nci = currentIndex;
+    if (index < currentIndex) nci = currentIndex - 1;
+    else if (index === currentIndex) {
+      // keep index pointing at next song; if at end, stop
+      if (nci >= nq.length) {
+        set({ queue: nq, currentIndex: -1, isPlaying: false, progress: 0 });
+        return;
+      }
+    }
+    set({ queue: nq, currentIndex: nci, progress: index === currentIndex ? 0 : get().progress });
+  },
+  reorderQueue: (from, to) => {
+    const { queue, currentIndex } = get();
+    if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
+    const nq = [...queue];
+    const [moved] = nq.splice(from, 1);
+    nq.splice(to, 0, moved);
+    let nci = currentIndex;
+    if (from === currentIndex) nci = to;
+    else if (from < currentIndex && to >= currentIndex) nci = currentIndex - 1;
+    else if (from > currentIndex && to <= currentIndex) nci = currentIndex + 1;
+    set({ queue: nq, currentIndex: nci });
+  },
+  hydrate: (state) => set(state as PlayerState),
 }));
