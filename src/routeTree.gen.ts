@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LikedRouteImport } from './routes/liked'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -19,6 +20,11 @@ import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LikedRoute = LikedRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
+  '/login': typeof LoginRoute
   '/search': typeof SearchRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
+  '/login': typeof LoginRoute
   '/search': typeof SearchRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
+  '/login': typeof LoginRoute
   '/search': typeof SearchRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
     | '/admin'
     | '/library'
     | '/liked'
+    | '/login'
     | '/search'
     | '/playlist/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/library' | '/liked' | '/search' | '/playlist/$id'
+  to:
+    | '/'
+    | '/admin'
+    | '/library'
+    | '/liked'
+    | '/login'
+    | '/search'
+    | '/playlist/$id'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/library'
     | '/liked'
+    | '/login'
     | '/search'
     | '/playlist/$id'
   fileRoutesById: FileRoutesById
@@ -98,6 +116,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   LibraryRoute: typeof LibraryRoute
   LikedRoute: typeof LikedRoute
+  LoginRoute: typeof LoginRoute
   SearchRoute: typeof SearchRoute
   PlaylistIdRoute: typeof PlaylistIdRoute
 }
@@ -109,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/search'
       fullPath: '/search'
       preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/liked': {
@@ -154,9 +180,20 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   LibraryRoute: LibraryRoute,
   LikedRoute: LikedRoute,
+  LoginRoute: LoginRoute,
   SearchRoute: SearchRoute,
   PlaylistIdRoute: PlaylistIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
