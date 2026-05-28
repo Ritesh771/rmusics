@@ -1,34 +1,36 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Search, Library, Heart, Plus, Shield, Music } from "lucide-react";
+import { Home, Search, Library, Heart, Plus, Shield, Music, Clock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getOwnerKey } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const qc = useQueryClient();
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
 
   const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", owner],
+    queryKey: ["playlists", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("playlists")
         .select("*")
+        .eq("user_id", user!.id)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
 
   const createPlaylist = useMutation({
     mutationFn: async () => {
+      if (!user) throw new Error("Not signed in");
       const { data, error } = await supabase
         .from("playlists")
-        .insert({ name: `My Playlist #${playlists.length + 1}`, owner_key: owner })
+        .insert({ name: `My Playlist #${playlists.length + 1}`, user_id: user.id })
         .select()
         .single();
       if (error) throw error;
@@ -41,6 +43,7 @@ export function Sidebar() {
     { to: "/", icon: Home, label: "Home" },
     { to: "/search", icon: Search, label: "Search" },
     { to: "/library", icon: Library, label: "Library" },
+    { to: "/history", icon: Clock, label: "Recently played" },
   ];
 
   return (

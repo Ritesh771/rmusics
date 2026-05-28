@@ -5,7 +5,8 @@ import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Heart, Music, MoreHorizontal, ListMusic, Volume2, VolumeX,
 } from "lucide-react";
-import { formatDuration, getOwnerKey } from "@/lib/owner";
+import { formatDuration } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
@@ -20,7 +21,7 @@ export function NowPlaying() {
   const song = currentSong();
   const [showQueue, setShowQueue] = useState(false);
   const qc = useQueryClient();
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!nowPlayingOpen) return;
@@ -34,20 +35,20 @@ export function NowPlaying() {
   }, [nowPlayingOpen, closeNowPlaying]);
 
   const { data: liked = [] } = useQuery({
-    queryKey: ["liked", owner],
+    queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id").eq("owner_key", owner);
+      const { data } = await supabase.from("liked_songs").select("song_id");
       return data?.map((r) => r.song_id) ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
   const isLiked = song ? liked.includes(song.id) : false;
 
   const toggleLike = useMutation({
     mutationFn: async () => {
-      if (!song) return;
-      if (isLiked) await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("owner_key", owner);
-      else await supabase.from("liked_songs").insert({ song_id: song.id, owner_key: owner });
+      if (!song || !user) return;
+      if (isLiked) await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("user_id", user.id);
+      else await supabase.from("liked_songs").insert({ song_id: song.id, user_id: user.id });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });

@@ -9,7 +9,7 @@ import { usePlayer } from "@/lib/player-store";
 import { Play, Music, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { getOwnerKey } from "@/lib/owner";
+import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Wavely — Home" }] }),
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const owner = typeof window !== "undefined" ? getOwnerKey() : "";
+  const { user } = useAuth();
   const { data: songs = [] } = useQuery({
     queryKey: ["songs"],
     queryFn: async () => {
@@ -29,12 +29,12 @@ function HomePage() {
   });
 
   const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", owner],
+    queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("playlists").select("*").order("updated_at", { ascending: false }).limit(6);
+      const { data } = await supabase.from("playlists").select("*").eq("user_id", user!.id).order("updated_at", { ascending: false }).limit(6);
       return data ?? [];
     },
-    enabled: !!owner,
+    enabled: !!user,
   });
 
   const { playQueue } = usePlayer();
