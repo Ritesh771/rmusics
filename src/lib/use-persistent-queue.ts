@@ -59,7 +59,7 @@ export function usePersistentQueue(userId: string | null) {
         const s = usePlayer.getState();
         await supabase.from("user_queue").upsert({
           user_id: userId,
-          queue: s.queue as unknown as object,
+          queue: s.queue as unknown as any,
           current_index: s.currentIndex,
           shuffle: s.shuffle,
           repeat: s.repeat,
