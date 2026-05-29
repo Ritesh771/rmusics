@@ -9,6 +9,10 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { Player } from "@/components/Player";
+import { NowPlaying } from "@/components/NowPlaying";
+import { QueuePanel } from "@/components/QueuePanel";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -124,6 +128,10 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      <Player />
+      <NowPlaying />
+      <QueuePanel />
+      <Toaster theme="dark" />
     </QueryClientProvider>
   );
 }

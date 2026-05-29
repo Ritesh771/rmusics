@@ -1,10 +1,6 @@
 import { useEffect } from "react";
 import { Sidebar } from "./Sidebar";
-import { Player } from "./Player";
-import { NowPlaying } from "./NowPlaying";
-import { QueuePanel } from "./QueuePanel";
 import { ProfileMenu } from "./ProfileMenu";
-import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -12,7 +8,6 @@ import { Home, Search, Library, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
 import { Loader2 } from "lucide-react";
-import { usePlayer } from "@/lib/player-store";
 import { usePersistentQueue } from "@/lib/use-persistent-queue";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -20,7 +15,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const nav = useNavigate();
   const { user, loading } = useAuth();
-  const currentSong = usePlayer((s) => s.currentSong());
   usePersistentQueue(user?.id ?? null);
 
   // Realtime invalidation
@@ -83,9 +77,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      <Player />
-      <NowPlaying />
-      <QueuePanel />
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-black border-t border-border flex justify-around items-center z-50">
         {mobileNav.map((it) => (
@@ -102,7 +93,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
       </nav>
-      <Toaster theme="dark" />
     </div>
   );
 }
