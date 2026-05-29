@@ -16,10 +16,10 @@ export function QueuePanel() {
     queuePanelOpen, closeQueuePanel, queue, currentIndex,
     removeFromQueue, reorderQueue,
   } = usePlayer();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   if (!queuePanelOpen) return null;
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const current = queue[currentIndex];
   const upNext = queue.slice(currentIndex + 1);
 
@@ -33,9 +33,9 @@ export function QueuePanel() {
 
   return (
     <div
-      className="fixed z-[90] bg-neutral-900 border border-white/10 shadow-2xl flex flex-col
-                 inset-x-2 bottom-36 top-20 rounded-xl
-                 md:inset-auto md:right-3 md:bottom-24 md:top-20 md:w-96"
+      className="fixed z-[90] bg-neutral-900/85 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col
+                 inset-x-2 bottom-36 top-20 rounded-xl animate-in slide-in-from-bottom-4 fade-in duration-200
+                 md:inset-auto md:right-3 md:bottom-24 md:top-20 md:w-96 md:slide-in-from-right-4"
     >
       <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
         <h2 className="font-bold text-lg">Queue</h2>
