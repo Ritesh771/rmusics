@@ -119,6 +119,13 @@ export function Player() {
           </div>
           <Button
             size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            onClick={(e) => { e.stopPropagation(); toggleQueuePanel(); }}
+            aria-label="Queue"
+          >
+            <ListMusic className="h-5 w-5" />
+          </Button>
+          <Button
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
             onClick={(e) => { e.stopPropagation(); toggleLike.mutate(); }}
           >
             <Heart className={isLiked ? "h-5 w-5 fill-primary text-primary" : "h-5 w-5"} />

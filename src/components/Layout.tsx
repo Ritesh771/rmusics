@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
 import { Loader2 } from "lucide-react";
 import { usePlayer } from "@/lib/player-store";
+import { usePersistentQueue } from "@/lib/use-persistent-queue";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
@@ -20,6 +21,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const nav = useNavigate();
   const { user, loading } = useAuth();
   const currentSong = usePlayer((s) => s.currentSong());
+  usePersistentQueue(user?.id ?? null);
 
   // Realtime invalidation
   useEffect(() => {
