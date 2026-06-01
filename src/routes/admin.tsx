@@ -11,41 +11,50 @@ import { toast } from "sonner";
 import { formatDuration } from "@/lib/owner";
 import { getR2UploadUrl, deleteR2Object, extractR2Metadata } from "@/lib/r2-upload.functions";
 import { parseBlob } from "music-metadata";
+import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Wavely — Admin" }] }),
   component: AdminPage,
 });
 
-const ADMIN_PASSWORD = "R771@2026";
-const SESSION_KEY = "wavely_admin";
-
 function AdminPage() {
-  const [authed, setAuthed] = useState(false);
-  useEffect(() => {
-    setAuthed(sessionStorage.getItem(SESSION_KEY) === "1");
-  }, []);
-  if (!authed) return <Layout><Gate onPass={() => setAuthed(true)} /></Layout>;
+  const { user, loading } = useAuth();
+  const { data: isAdmin, isLoading: roleLoading } = useQuery({
+    queryKey: ["is-admin", user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+  if (loading || roleLoading) {
+    return (
+      <Layout>
+        <div className="p-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      </Layout>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <Layout>
+        <div className="p-10 max-w-md mx-auto text-center space-y-2">
+          <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto" />
+          <h1 className="text-xl font-bold">Admin access required</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account doesn't have the <code>admin</code> role. Ask an existing admin to grant it via the <code>user_roles</code> table.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
   return <Layout><AdminPanel /></Layout>;
-}
-
-function Gate({ onPass }: { onPass: () => void }) {
-  const [pw, setPw] = useState("");
-  return (
-    <div className="p-6 max-w-sm mx-auto mt-20">
-      <h1 className="text-2xl font-bold mb-4">Admin</h1>
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        if (pw === ADMIN_PASSWORD) {
-          sessionStorage.setItem(SESSION_KEY, "1");
-          onPass();
-        } else toast.error("Wrong password");
-      }} className="space-y-3">
-        <Input type="password" placeholder="Admin password" value={pw} onChange={(e) => setPw(e.target.value)} />
-        <Button type="submit" className="w-full">Enter</Button>
-      </form>
-    </div>
-  );
 }
 
 type QueueStatus = "pending" | "parsing" | "ready" | "duplicate" | "uploading" | "done" | "error";
