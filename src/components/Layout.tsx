@@ -8,14 +8,12 @@ import { Home, Search, Library, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
 import { Loader2 } from "lucide-react";
-import { usePersistentQueue } from "@/lib/use-persistent-queue";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const nav = useNavigate();
   const { user, loading } = useAuth();
-  usePersistentQueue(user?.id ?? null);
 
   // Realtime invalidation
   useEffect(() => {
