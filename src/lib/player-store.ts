@@ -178,7 +178,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0 });
       return;
     }
-    set({ queue: [...queue, song], originalQueue: [...originalQueue, song] });
+    // Insert at top of upcoming queue (right after the currently playing track) — Spotify "Add to Queue" feel
+    const insertAt = Math.max(currentIndex + 1, 0);
+    const nq = [...queue];
+    nq.splice(insertAt, 0, song);
+    const noq = [...originalQueue];
+    noq.splice(insertAt, 0, song);
+    set({ queue: nq, originalQueue: noq });
   },
   playNext: (song) => {
     const { queue, originalQueue, currentIndex } = get();
