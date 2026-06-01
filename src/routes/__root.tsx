@@ -13,6 +13,8 @@ import { Player } from "@/components/Player";
 import { NowPlaying } from "@/components/NowPlaying";
 import { QueuePanel } from "@/components/QueuePanel";
 import { Toaster } from "@/components/ui/sonner";
+import { usePersistentQueue } from "@/lib/use-persistent-queue";
+import { useAuth } from "@/lib/auth-hook";
 
 function NotFoundComponent() {
   return (
@@ -127,11 +129,21 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <RootInner />
+    </QueryClientProvider>
+  );
+}
+
+function RootInner() {
+  const { user } = useAuth();
+  usePersistentQueue(user?.id ?? null);
+  return (
+    <>
       <Outlet />
       <Player />
       <NowPlaying />
       <QueuePanel />
       <Toaster theme="dark" />
-    </QueryClientProvider>
+    </>
   );
 }
