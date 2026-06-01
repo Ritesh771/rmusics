@@ -1,6 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { AwsClient } from "aws4fetch";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+async function assertAdmin(ctx: { supabase: any; userId: string }) {
+  const { data, error } = await ctx.supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", ctx.userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) throw new Error("Authorization check failed");
+  if (!data) throw new Error("Forbidden: admin role required");
+}
 
 const inputSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -8,8 +20,10 @@ const inputSchema = z.object({
 });
 
 export const getR2UploadUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input) => inputSchema.parse(input))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context as any);
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
@@ -54,8 +68,10 @@ export const getR2UploadUrl = createServerFn({ method: "POST" })
   });
 
 export const deleteR2Object = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ key: z.string().min(1) }).parse(input))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context as any);
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
@@ -78,10 +94,24 @@ export const deleteR2Object = createServerFn({ method: "POST" })
 // music-metadata. Returns null fields if parsing fails so the caller can
 // merge with whatever the client extracted.
 export const extractR2Metadata = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
     z.object({ url: z.string().url() }).parse(input)
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context as any);
+    // SSRF guard: only allow fetching from our configured R2 public origin
+    const publicUrl = process.env.R2_PUBLIC_URL;
+    if (!publicUrl) throw new Error("R2_PUBLIC_URL not configured");
+    try {
+      const allowed = new URL(publicUrl);
+      const target = new URL(data.url);
+      if (target.hostname !== allowed.hostname || target.protocol !== "https:") {
+        throw new Error("Forbidden: URL must match R2_PUBLIC_URL host");
+      }
+    } catch {
+      throw new Error("Invalid URL");
+    }
     try {
       const { parseWebStream } = await import("music-metadata");
       const res = await fetch(data.url);
