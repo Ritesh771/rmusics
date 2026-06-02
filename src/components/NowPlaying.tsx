@@ -9,7 +9,7 @@ import { formatDuration } from "@/lib/owner";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export function NowPlaying() {
@@ -20,6 +20,8 @@ export function NowPlaying() {
   } = usePlayer();
   const song = currentSong();
   const [showQueue, setShowQueue] = useState(false);
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const qc = useQueryClient();
   const { user } = useAuth();
 
@@ -55,6 +57,24 @@ export function NowPlaying() {
 
   if (!nowPlayingOpen || !song) return null;
 
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const dx = e.touches[0].clientX - touchStart.current.x;
+    const dy = e.touches[0].clientY - touchStart.current.y;
+    if (Math.abs(dx) > Math.abs(dy)) setSwipeX(dx);
+  };
+  const onTouchEnd = () => {
+    const dx = swipeX;
+    setSwipeX(0);
+    touchStart.current = null;
+    if (dx <= -60) next();
+    else if (dx >= 60) prev();
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-gradient-to-b from-neutral-800 via-neutral-900 to-black text-white flex flex-col animate-in slide-in-from-bottom duration-300">
       {/* Header */}
@@ -74,9 +94,25 @@ export function NowPlaying() {
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         {/* Artwork + controls */}
         <div className={cn("flex-1 flex flex-col items-center justify-center px-6 pb-6 min-h-0", showQueue && "hidden md:flex")}>
-          <div className="w-full max-w-md aspect-square rounded-lg overflow-hidden bg-neutral-700 shadow-2xl flex items-center justify-center">
+          <div
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            style={{
+              transform: `translateX(${swipeX}px) rotate(${swipeX * 0.02}deg)`,
+              transition: swipeX === 0 ? "transform 0.3s cubic-bezier(0.22,1,0.36,1)" : "none",
+              opacity: 1 - Math.min(Math.abs(swipeX) / 400, 0.4),
+            }}
+            className="w-full max-w-md aspect-square rounded-lg overflow-hidden bg-neutral-700 shadow-2xl flex items-center justify-center touch-pan-y select-none"
+          >
             {song.thumbnail_url ? (
-              <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
+              <img
+                key={song.id}
+                src={song.thumbnail_url}
+                alt=""
+                draggable={false}
+                className="h-full w-full object-cover animate-fade-in"
+              />
             ) : (
               <Music className="h-24 w-24 text-white/30" />
             )}
