@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { MoodBackdrop } from "./MoodBackdrop";
 
 export function NowPlaying() {
   const {
@@ -76,9 +77,10 @@ export function NowPlaying() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-neutral-800 via-neutral-900 to-black text-white flex flex-col animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-neutral-900 via-black to-black text-white flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden">
+      <MoodBackdrop intensity={1.2} />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+      <div className="relative z-10 flex items-center justify-between px-4 py-3 shrink-0">
         <Button size="icon" variant="ghost" className="text-white hover:bg-white/10" onClick={closeNowPlaying}>
           <ChevronDown className="h-6 w-6" />
         </Button>
@@ -91,7 +93,7 @@ export function NowPlaying() {
         </Button>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+      <div className="relative z-10 flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         {/* Artwork + controls */}
         <div className={cn("flex-1 flex flex-col items-center justify-center px-6 pb-6 min-h-0", showQueue && "hidden md:flex")}>
           <div

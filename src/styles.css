@@ -158,3 +158,27 @@
 .animate-fade-in { animation: fade-in 0.3s ease-out both; }
 .animate-slide-in-right { animation: slide-in-right 0.3s ease-out both; }
 .animate-slide-in-up { animation: slide-in-up 0.3s ease-out both; }
+
+@keyframes mood-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(6%, -4%, 0) scale(1.08); }
+  66%      { transform: translate3d(-5%, 5%, 0) scale(0.95); }
+}
+.mood-blob { animation: mood-drift 18s ease-in-out infinite; will-change: transform; }
+.mood-blob-delay { animation-delay: -6s; animation-duration: 22s; }
+.mood-blob-delay-2 { animation-delay: -12s; animation-duration: 26s; }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+.animate-pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
+
+/* Global smooth transitions for interactive elements */
+button, a { transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mood-blob, .animate-fade-in, .animate-slide-in-right, .animate-slide-in-up, .animate-pulse-soft {
+    animation: none !important;
+  }
+}
