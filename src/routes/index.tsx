@@ -11,6 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-hook";
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "Good night";
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Good night";
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Wavely — Home" }] }),
   component: HomePage,
@@ -48,8 +57,8 @@ function HomePage() {
   return (
     <Layout>
       <div className="p-6 space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-4">Good evening</h1>
+        <div className="animate-fade-in">
+          <h1 className="text-3xl font-bold mb-4">{greeting()}</h1>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recent.slice(0, 6).map((s) => (
               <div key={s.id} className="group relative flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden transition">
