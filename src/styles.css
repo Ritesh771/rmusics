@@ -168,60 +168,6 @@
 .mood-blob-delay { animation-delay: -6s; animation-duration: 22s; }
 .mood-blob-delay-2 { animation-delay: -12s; animation-duration: 26s; }
 
-/* ---------- Aurora mood lights ---------- */
-@keyframes aurora-sway-1 {
-  0%, 100% { transform: translate3d(-10%, -8%, 0) rotate(-12deg) skewX(-8deg) scale(calc(1.15 * var(--mood-pulse, 1))); }
-  50%      { transform: translate3d( 12%,  6%, 0) rotate(  6deg) skewX( 10deg) scale(calc(1.35 * var(--mood-pulse, 1))); }
-}
-@keyframes aurora-sway-2 {
-  0%, 100% { transform: translate3d( 8%, 10%, 0) rotate( 14deg) skewY( 6deg) scale(calc(1.2  * var(--mood-pulse, 1))); }
-  50%      { transform: translate3d(-14%, -4%, 0) rotate(-10deg) skewY(-8deg) scale(calc(1.4  * var(--mood-pulse, 1))); }
-}
-@keyframes aurora-sway-3 {
-  0%, 100% { transform: translate3d(  0%, -12%, 0) rotate( -4deg) scale(calc(1.1 * var(--mood-pulse, 1))); }
-  50%      { transform: translate3d(  0%,  10%, 0) rotate(  8deg) scale(calc(1.3 * var(--mood-pulse, 1))); }
-}
-.mood-aurora {
-  position: absolute;
-  inset: -25%;
-  filter: blur(70px) saturate(140%);
-  mix-blend-mode: screen;
-  opacity: calc(0.55 + var(--mood-level, 0) * 0.45);
-  will-change: transform, opacity, filter;
-  transition: opacity 200ms ease;
-}
-.mood-aurora-1 { animation: aurora-sway-1 14s ease-in-out infinite; }
-.mood-aurora-2 { animation: aurora-sway-2 18s ease-in-out infinite; animation-delay: -5s; }
-.mood-aurora-3 { animation: aurora-sway-3 22s ease-in-out infinite; animation-delay: -10s; }
-
-@keyframes aurora-breathe {
-  0%, 100% { opacity: 0.35; }
-  50%      { opacity: 0.7; }
-}
-.mood-pulse-orb {
-  position: absolute;
-  left: 50%; top: 55%;
-  width: 70vmin; height: 70vmin;
-  margin-left: -35vmin; margin-top: -35vmin;
-  border-radius: 9999px;
-  filter: blur(60px);
-  mix-blend-mode: screen;
-  transform: scale(calc(0.85 + var(--mood-level, 0) * 0.6));
-  opacity: calc(0.25 + var(--mood-level, 0) * 0.55);
-  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease;
-  animation: aurora-breathe 6s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-
-.mood-grain {
-  position: absolute; inset: 0;
-  opacity: 0.06;
-  mix-blend-mode: overlay;
-  background-image: radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px);
-  background-size: 3px 3px;
-  pointer-events: none;
-}
-
 @keyframes pulse-soft {
   0%, 100% { opacity: 0.85; }
   50%      { opacity: 1; }
@@ -232,7 +178,7 @@
 button, a { transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mood-blob, .mood-aurora, .mood-pulse-orb, .animate-fade-in, .animate-slide-in-right, .animate-slide-in-up, .animate-pulse-soft {
+  .mood-blob, .animate-fade-in, .animate-slide-in-right, .animate-slide-in-up, .animate-pulse-soft {
     animation: none !important;
   }
 }

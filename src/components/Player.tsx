@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { usePlayer } from "@/lib/player-store";
-import { useMood } from "@/lib/mood-store";
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Heart, Clock, Music
@@ -18,10 +17,6 @@ import {
 
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const rafRef = useRef<number | null>(null);
   const {
     isPlaying, volume, muted, progress, duration, shuffle, repeat,
     _seekTarget, sleepTimer, togglePlay, next, prev, setVolume, toggleMute,
@@ -31,8 +26,6 @@ export function Player() {
   const song = currentSong();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const setLevel = useMood((s) => s.setLevel);
-  const moodEnabled = useMood((s) => s.enabled);
 
   // Audio src/play control
   useEffect(() => {
@@ -42,64 +35,9 @@ export function Player() {
       audio.src = song.audio_url;
       audio.currentTime = 0;
     }
-    if (isPlaying) {
-      audioCtxRef.current?.resume().catch(() => {});
-      audio.play().catch(() => {});
-    } else audio.pause();
+    if (isPlaying) audio.play().catch(() => {});
+    else audio.pause();
   }, [song?.id, isPlaying]);
-
-  // Web Audio analyser → mood level (drives aurora reactivity)
-  useEffect(() => {
-    if (!moodEnabled) {
-      setLevel(0);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-      return;
-    }
-    const audio = audioRef.current;
-    if (!audio) return;
-    try {
-      if (!audioCtxRef.current) {
-        const AC = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AC) return;
-        audioCtxRef.current = new AC();
-      }
-      const ctx = audioCtxRef.current!;
-      if (!sourceRef.current) {
-        sourceRef.current = ctx.createMediaElementSource(audio);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.78;
-        sourceRef.current.connect(analyser);
-        analyser.connect(ctx.destination);
-        analyserRef.current = analyser;
-      }
-    } catch { /* CORS or already-connected — skip */ }
-
-    const analyser = analyserRef.current;
-    if (!analyser) return;
-    const buf = new Uint8Array(analyser.frequencyBinCount);
-    let smooth = 0;
-    const tick = () => {
-      analyser.getByteFrequencyData(buf);
-      // weight lows (bass) more — that's what feels like "the beat"
-      let sum = 0, weight = 0;
-      for (let i = 0; i < buf.length; i++) {
-        const w = 1 - i / buf.length;
-        sum += buf[i] * w;
-        weight += 255 * w;
-      }
-      const level = sum / weight;
-      smooth = smooth * 0.7 + level * 0.3;
-      setLevel(smooth);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [moodEnabled, setLevel]);
 
   // Volume
   useEffect(() => {

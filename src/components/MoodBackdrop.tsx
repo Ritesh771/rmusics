@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { usePlayer } from "@/lib/player-store";
 import { useMood } from "@/lib/mood-store";
 
@@ -45,9 +45,8 @@ async function extractDominantColor(url: string): Promise<string | null> {
 export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
   const isPlaying = usePlayer((s) => s.isPlaying);
-  const { enabled, color, setColor, level } = useMood();
+  const { enabled, color, setColor } = useMood();
   const lastUrl = useRef<string | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const url = song?.thumbnail_url;
@@ -56,72 +55,37 @@ export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
     extractDominantColor(url).then((c) => { if (c) setColor(c); });
   }, [song?.thumbnail_url, setColor]);
 
-  // Apply the reactive level via CSS vars (avoids React re-render storm)
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const lvl = Math.min(1, level * 1.4);
-    el.style.setProperty("--mood-level", String(lvl));
-    el.style.setProperty("--mood-pulse", String(1 + lvl * 0.18));
-  }, [level]);
-
   if (!enabled) return null;
 
-  // Build an aurora-tinted palette by shifting the base color toward neighbours
-  const palette = useMemo(() => {
-    const [r, g, b] = color.split(",").map((n) => parseInt(n, 10) || 0);
-    const shift = (dr: number, dg: number, db: number) =>
-      `${Math.max(0, Math.min(255, r + dr))},${Math.max(0, Math.min(255, g + dg))},${Math.max(0, Math.min(255, b + db))}`;
-    return {
-      a: `${r},${g},${b}`,
-      b: shift(-40, 30, 60),
-      c: shift(60, -20, -30),
-      d: shift(20, 60, -10),
-    };
-  }, [color]);
-
-  const baseOpacity = (isPlaying ? 0.6 : 0.3) * intensity;
+  const baseOpacity = (isPlaying ? 0.55 : 0.3) * intensity;
 
   return (
     <div
-      ref={rootRef}
       aria-hidden
       className="pointer-events-none fixed inset-0 -z-0 overflow-hidden"
-      style={{
-        opacity: baseOpacity,
-        transition: "opacity 600ms ease",
-        ["--mood-level" as any]: 0,
-        ["--mood-pulse" as any]: 1,
-      }}
+      style={{ transition: "opacity 600ms ease" }}
     >
-      {/* Aurora ribbons — tall soft sheets that sway across the screen */}
       <div
-        className="mood-aurora mood-aurora-1"
+        className="absolute -top-1/4 -left-1/4 h-[70vh] w-[70vh] rounded-full blur-3xl mood-blob"
         style={{
-          background: `linear-gradient(115deg, rgba(${palette.a},0) 0%, rgba(${palette.a},0.55) 35%, rgba(${palette.b},0.65) 55%, rgba(${palette.a},0) 80%)`,
+          background: `radial-gradient(circle, rgba(${color},${baseOpacity}) 0%, rgba(${color},0) 70%)`,
+          transition: "background 1200ms ease",
         }}
       />
       <div
-        className="mood-aurora mood-aurora-2"
+        className="absolute -bottom-1/4 -right-1/4 h-[80vh] w-[80vh] rounded-full blur-3xl mood-blob mood-blob-delay"
         style={{
-          background: `linear-gradient(70deg, rgba(${palette.c},0) 0%, rgba(${palette.c},0.5) 40%, rgba(${palette.d},0.6) 60%, rgba(${palette.c},0) 85%)`,
+          background: `radial-gradient(circle, rgba(${color},${baseOpacity * 0.9}) 0%, rgba(${color},0) 70%)`,
+          transition: "background 1200ms ease",
         }}
       />
       <div
-        className="mood-aurora mood-aurora-3"
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 h-[55vh] w-[55vh] rounded-full blur-3xl mood-blob mood-blob-delay-2"
         style={{
-          background: `linear-gradient(160deg, rgba(${palette.b},0) 0%, rgba(${palette.d},0.45) 50%, rgba(${palette.a},0) 90%)`,
+          background: `radial-gradient(circle, rgba(${color},${baseOpacity * 0.6}) 0%, rgba(${color},0) 70%)`,
+          transition: "background 1200ms ease",
         }}
       />
-      {/* Pulsing bass orb that breathes with the beat */}
-      <div
-        className="mood-pulse-orb"
-        style={{
-          background: `radial-gradient(circle, rgba(${palette.a},0.7) 0%, rgba(${palette.a},0) 70%)`,
-        }}
-      />
-      {/* Subtle grain to keep it cinematic, not gradient-y */}
-      <div className="mood-grain" />
     </div>
   );
 }

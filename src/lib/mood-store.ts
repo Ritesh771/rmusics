@@ -3,9 +3,7 @@ import { create } from "zustand";
 type MoodState = {
   enabled: boolean;
   color: string; // rgb triplet "r,g,b"
-  level: number; // 0..1 live audio amplitude
   setColor: (c: string) => void;
-  setLevel: (l: number) => void;
   toggle: () => void;
   setEnabled: (v: boolean) => void;
 };
@@ -19,9 +17,7 @@ const initial = (() => {
 export const useMood = create<MoodState>((set) => ({
   enabled: initial,
   color: "139,92,246", // default violet
-  level: 0,
   setColor: (c) => set({ color: c }),
-  setLevel: (l) => set({ level: l }),
   toggle: () =>
     set((s) => {
       const next = !s.enabled;
