@@ -69,12 +69,29 @@ type PlayerState = {
   hydrate: (state: Partial<PlayerState>) => void;
 };
 
-function shuffleArr<T>(arr: T[], keepIndex: number): T[] {
+function shuffleArr<T extends { artist?: string; genre?: string | null }>(
+  arr: T[],
+  keepIndex: number,
+): T[] {
+  // Spotify-style "smart shuffle": Fisher–Yates, then a second pass that
+  // tries to avoid two same-artist (or same-genre) songs back-to-back and
+  // mildly front-loads diversity.
   const current = arr[keepIndex];
   const rest = arr.filter((_, i) => i !== keepIndex);
   for (let i = rest.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  // Anti-adjacency pass — push duplicate-artist neighbors a few slots forward.
+  for (let i = 1; i < rest.length; i++) {
+    const prev = rest[i - 1];
+    if (!prev || rest[i].artist !== prev.artist) continue;
+    // Find the next item that differs and swap it in.
+    let swap = -1;
+    for (let j = i + 1; j < Math.min(rest.length, i + 6); j++) {
+      if (rest[j].artist !== prev.artist) { swap = j; break; }
+    }
+    if (swap !== -1) [rest[i], rest[swap]] = [rest[swap], rest[i]];
   }
   return [current, ...rest];
 }

@@ -23,15 +23,34 @@ function LibraryPage() {
     },
     enabled: !!user,
   });
+  const { data: featured = [] } = useQuery({
+    queryKey: ["playlists", "featured"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("playlists")
+        .select("*")
+        .eq("is_featured", true)
+        .order("created_at", { ascending: true });
+      return data ?? [];
+    },
+  });
 
   const term = q.trim().toLowerCase();
+  // Merge featured + own, de-duplicated, featured first
+  const merged = useMemo(() => {
+    const seen = new Set<string>();
+    const out: typeof playlists = [];
+    for (const p of featured) if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    for (const p of playlists) if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    return out;
+  }, [featured, playlists]);
   const filtered = useMemo(() => {
-    if (!term) return playlists;
-    return playlists.filter((p) =>
+    if (!term) return merged;
+    return merged.filter((p) =>
       (p.name || "").toLowerCase().includes(term) ||
       (p.description || "").toLowerCase().includes(term)
     );
-  }, [playlists, term]);
+  }, [merged, term]);
   const showLiked = !term || "liked songs".includes(term);
 
   return (

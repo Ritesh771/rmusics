@@ -46,6 +46,18 @@ function HomePage() {
     enabled: !!user,
   });
 
+  const { data: featured = [] } = useQuery({
+    queryKey: ["playlists", "featured"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("playlists")
+        .select("*")
+        .eq("is_featured", true)
+        .order("created_at", { ascending: true });
+      return data ?? [];
+    },
+  });
+
   const { playQueue } = usePlayer();
   const recent = songs.slice(0, 8);
   const byGenre: Record<string, Song[]> = {};
@@ -89,6 +101,28 @@ function HomePage() {
             ))}
           </div>
         </div>
+
+        {featured.length > 0 && (
+          <Section title="Featured">
+            {featured.map((p) => (
+              <Link key={p.id} to="/playlist/$id" params={{ id: p.id }} className="block group">
+                <div className="bg-card p-4 rounded-md hover:bg-accent hover:scale-[1.02] transition-all duration-200">
+                  <div className="aspect-square bg-muted rounded mb-3 overflow-hidden">
+                    {p.cover_url ? (
+                      <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary to-purple-600">
+                        <Music className="h-10 w-10 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="font-semibold truncate">{p.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{p.description || "Playlist"}</div>
+                </div>
+              </Link>
+            ))}
+          </Section>
+        )}
 
         {playlists.length > 0 && (
           <Section title="Your playlists">
