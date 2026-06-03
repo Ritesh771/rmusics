@@ -22,6 +22,8 @@ export function NowPlaying() {
   const song = currentSong();
   const [showQueue, setShowQueue] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
+  const [scrubbing, setScrubbing] = useState(false);
+  const [scrubValue, setScrubValue] = useState(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -138,13 +140,14 @@ export function NowPlaying() {
 
             <div className="space-y-1">
               <Slider
-                value={[progress]}
+                value={[scrubbing ? scrubValue : progress]}
                 max={duration || 1}
-                step={0.1}
-                onValueChange={(v) => seek(v[0])}
+                step={0.01}
+                onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); }}
+                onValueCommit={(v) => { seek(v[0]); setScrubbing(false); }}
               />
-              <div className="flex justify-between text-xs text-white/60">
-                <span>{formatDuration(progress)}</span>
+              <div className="flex justify-between text-xs text-white/60 tabular-nums">
+                <span>{formatDuration(scrubbing ? scrubValue : progress)}</span>
                 <span>{formatDuration(duration)}</span>
               </div>
             </div>
