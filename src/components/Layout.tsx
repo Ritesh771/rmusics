@@ -7,17 +7,14 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Home, Search, Library, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { MoodBackdrop } from "./MoodBackdrop";
-import { useMood } from "@/lib/mood-store";
-import { Button } from "./ui/button";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const nav = useNavigate();
   const { user, loading } = useAuth();
-  const { enabled: moodOn, toggle: toggleMood } = useMood();
 
   // Realtime invalidation
   useEffect(() => {
@@ -75,16 +72,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-36 md:pb-2">
           <div className="flex justify-end items-center gap-2 p-3 md:p-4 sticky top-0 z-30 bg-gradient-to-b from-background/80 to-transparent backdrop-blur">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={toggleMood}
-              aria-label="Toggle mood lights"
-              title={moodOn ? "Mood lights on" : "Mood lights off"}
-              className="h-8 w-8 rounded-full"
-            >
-              <Sparkles className={cn("h-4 w-4 transition-colors", moodOn ? "text-primary animate-pulse-soft" : "text-muted-foreground")} />
-            </Button>
             <ProfileMenu />
           </div>
           {children}

@@ -27,7 +27,12 @@ export function NowPlaying() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!nowPlayingOpen) return;
+    if (!nowPlayingOpen) {
+      // Always return to the artwork view next time the player is opened
+      setShowQueue(false);
+      setSwipeX(0);
+      return;
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNowPlaying(); };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
