@@ -4,16 +4,20 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, User as UserIcon, Library, Clock } from "lucide-react";
+import { LogOut, Library, Clock, Sparkles } from "lucide-react";
 import { useAuth, getDisplayName, getAvatarUrl } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMood } from "@/lib/mood-store";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 export function ProfileMenu() {
   const { user } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
+  const { enabled: moodOn, toggle: toggleMood } = useMood();
   if (!user) return null;
   const name = getDisplayName(user);
   const avatar = getAvatarUrl(user);
@@ -40,6 +44,17 @@ export function ProfileMenu() {
           <span className="font-semibold truncate">{name}</span>
           <span className="text-xs font-normal text-muted-foreground truncate">{user.email}</span>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(e) => { e.preventDefault(); toggleMood(); }}
+          className="flex items-center justify-between gap-3"
+        >
+          <span className="flex items-center">
+            <Sparkles className={cn("h-4 w-4 mr-2 transition-colors", moodOn ? "text-primary" : "text-muted-foreground")} />
+            Mood lights
+          </span>
+          <Switch checked={moodOn} onCheckedChange={() => toggleMood()} onClick={(e) => e.stopPropagation()} />
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/library"><Library className="h-4 w-4 mr-2" />Library</Link>
