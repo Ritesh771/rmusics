@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePlayer } from "@/lib/player-store";
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
@@ -17,6 +17,8 @@ import {
 
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [scrubbing, setScrubbing] = useState(false);
+  const [scrubValue, setScrubValue] = useState(0);
   const {
     isPlaying, volume, muted, progress, duration, shuffle, repeat,
     _seekTarget, sleepTimer, togglePlay, next, prev, setVolume, toggleMute,
@@ -51,6 +53,19 @@ export function Player() {
       clearSeek();
     }
   }, [_seekTarget, clearSeek]);
+
+  // Smooth progress via rAF — avoids the choppy ~4Hz timeupdate event
+  useEffect(() => {
+    if (!isPlaying) return;
+    let raf = 0;
+    const tick = () => {
+      const a = audioRef.current;
+      if (a && !scrubbing) setProgress(a.currentTime);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, scrubbing, setProgress]);
 
   // Sleep timer
   useEffect(() => {
@@ -90,7 +105,6 @@ export function Player() {
     <>
       <audio
         ref={audioRef}
-        onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onEnded={() => {
           if (repeat === "one" && audioRef.current) {
@@ -203,15 +217,16 @@ export function Player() {
           </Button>
         </div>
         <div className="flex items-center gap-2 w-full max-w-xl">
-          <span className="text-xs text-muted-foreground w-10 text-right">{formatDuration(progress)}</span>
+          <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{formatDuration(scrubbing ? scrubValue : progress)}</span>
           <Slider
-            value={[progress]}
+            value={[scrubbing ? scrubValue : progress]}
             max={duration || 1}
-            step={0.1}
-            onValueChange={(v) => seek(v[0])}
+            step={0.01}
+            onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); }}
+            onValueCommit={(v) => { seek(v[0]); setScrubbing(false); }}
             className="flex-1"
           />
-          <span className="text-xs text-muted-foreground w-10">{formatDuration(duration)}</span>
+          <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatDuration(duration)}</span>
         </div>
       </div>
 
