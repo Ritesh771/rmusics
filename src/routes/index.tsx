@@ -58,7 +58,7 @@ function HomePage() {
     },
   });
 
-  const { playQueue } = usePlayer();
+  const playQueue = usePlayer((s) => s.playQueue);
   const recent = songs.slice(0, 8);
   const byGenre: Record<string, Song[]> = {};
   for (const s of songs) {

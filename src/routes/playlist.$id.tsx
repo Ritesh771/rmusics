@@ -22,7 +22,7 @@ function PlaylistPage() {
   const { id } = Route.useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const { playQueue } = usePlayer();
+  const playQueue = usePlayer((s) => s.playQueue);
 
   const { data: playlist } = useQuery({
     queryKey: ["playlist", id, "meta"],
