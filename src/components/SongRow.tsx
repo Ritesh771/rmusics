@@ -16,9 +16,13 @@ type Props = {
 };
 
 export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: Props) {
-  const { playQueue, togglePlay, currentSong, isPlaying } = usePlayer();
-  const cur = currentSong();
-  const isCurrent = cur?.id === song.id;
+  // Subscribe ONLY to the slivers we render — avoids re-rendering every row
+  // on every progress tick (the previous full-store subscription was the main
+  // source of list lag).
+  const isCurrent = usePlayer(
+    (s) => s.queue[s.currentIndex]?.id === song.id,
+  );
+  const isPlaying = usePlayer((s) => s.isPlaying);
   const qc = useQueryClient();
   const { user } = useAuth();
 
@@ -45,8 +49,9 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
   });
 
   const handlePlay = () => {
-    if (isCurrent) togglePlay();
-    else playQueue(queue, index);
+    const p = usePlayer.getState();
+    if (p.queue[p.currentIndex]?.id === song.id) p.togglePlay();
+    else p.playQueue(queue, index);
   };
 
   return (

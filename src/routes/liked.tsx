@@ -15,7 +15,7 @@ export const Route = createFileRoute("/liked")({
 
 function LikedPage() {
   const { user } = useAuth();
-  const { playQueue } = usePlayer();
+  const playQueue = usePlayer((s) => s.playQueue);
   const { data: songs = [] } = useQuery({
     queryKey: ["liked", "songs", user?.id],
     queryFn: async () => {
