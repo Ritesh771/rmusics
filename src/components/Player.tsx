@@ -101,7 +101,7 @@ export function Player() {
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
     } catch {}
     const ms = navigator.mediaSession;
-    const safe = (action: MediaSessionAction, handler: (() => void) | null) => {
+    const safe = (action: MediaSessionAction, handler: ((details: any) => void) | null) => {
       try { ms.setActionHandler(action, handler as any); } catch {}
     };
     safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
