@@ -78,6 +78,57 @@ export function Player() {
     return () => clearInterval(id);
   }, [sleepTimer]);
 
+  // MediaSession — lock-screen / notification controls + reliable background playback
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!song) {
+      try { navigator.mediaSession.metadata = null; } catch {}
+      return;
+    }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.title,
+        artist: song.artist,
+        album: song.album ?? "",
+        artwork: song.thumbnail_url
+          ? [96, 192, 256, 384, 512].map((s) => ({
+              src: song.thumbnail_url!,
+              sizes: `${s}x${s}`,
+              type: "image/png",
+            }))
+          : [],
+      });
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    } catch {}
+    const ms = navigator.mediaSession;
+    const safe = (action: MediaSessionAction, handler: ((details: any) => void) | null) => {
+      try { ms.setActionHandler(action, handler as any); } catch {}
+    };
+    safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
+    safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
+    safe("previoustrack", () => prev());
+    safe("nexttrack", () => next());
+    safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
+    return () => {
+      ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
+        safe(a as MediaSessionAction, null),
+      );
+    };
+  }, [song?.id, isPlaying, next, prev, seek]);
+
+  // Keep position state up-to-date for OS scrubber
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!duration || !isFinite(duration)) return;
+    try {
+      navigator.mediaSession.setPositionState?.({
+        duration,
+        position: Math.min(progress, duration),
+        playbackRate: audioRef.current?.playbackRate ?? 1,
+      });
+    } catch {}
+  }, [progress, duration, isPlaying]);
+
   // Liked songs
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],

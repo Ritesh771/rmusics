@@ -21,10 +21,11 @@ export function NowPlaying() {
   } = usePlayer();
   const song = currentSong();
   const [showQueue, setShowQueue] = useState(false);
-  const [swipeX, setSwipeX] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const swipeRef = useRef<HTMLDivElement | null>(null);
+  const swipeDX = useRef(0);
   const qc = useQueryClient();
   const { user } = useAuth();
 
@@ -32,7 +33,8 @@ export function NowPlaying() {
     if (!nowPlayingOpen) {
       // Always return to the artwork view next time the player is opened
       setShowQueue(false);
-      setSwipeX(0);
+      swipeDX.current = 0;
+      if (swipeRef.current) swipeRef.current.style.transform = "";
       return;
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNowPlaying(); };
@@ -68,17 +70,27 @@ export function NowPlaying() {
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY };
+    if (swipeRef.current) swipeRef.current.style.transition = "none";
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!touchStart.current) return;
     const dx = e.touches[0].clientX - touchStart.current.x;
     const dy = e.touches[0].clientY - touchStart.current.y;
-    if (Math.abs(dx) > Math.abs(dy)) setSwipeX(dx);
+    if (Math.abs(dx) > Math.abs(dy) && swipeRef.current) {
+      swipeDX.current = dx;
+      swipeRef.current.style.transform = `translate3d(${dx}px,0,0) rotate(${dx * 0.02}deg)`;
+      swipeRef.current.style.opacity = String(1 - Math.min(Math.abs(dx) / 400, 0.4));
+    }
   };
   const onTouchEnd = () => {
-    const dx = swipeX;
-    setSwipeX(0);
+    const dx = swipeDX.current;
+    swipeDX.current = 0;
     touchStart.current = null;
+    if (swipeRef.current) {
+      swipeRef.current.style.transition = "transform 0.3s cubic-bezier(0.22,1,0.36,1), opacity 0.3s";
+      swipeRef.current.style.transform = "";
+      swipeRef.current.style.opacity = "1";
+    }
     if (dx <= -60) next();
     else if (dx >= 60) prev();
   };
@@ -104,14 +116,11 @@ export function NowPlaying() {
         {/* Artwork + controls */}
         <div className={cn("flex-1 flex flex-col items-center justify-center px-6 pb-6 min-h-0", showQueue && "hidden md:flex")}>
           <div
+            ref={swipeRef}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
-            style={{
-              transform: `translateX(${swipeX}px) rotate(${swipeX * 0.02}deg)`,
-              transition: swipeX === 0 ? "transform 0.3s cubic-bezier(0.22,1,0.36,1)" : "none",
-              opacity: 1 - Math.min(Math.abs(swipeX) / 400, 0.4),
-            }}
+            style={{ willChange: "transform" }}
             className="w-full max-w-md aspect-square rounded-lg overflow-hidden bg-neutral-700 shadow-2xl flex items-center justify-center touch-pan-y select-none"
           >
             {song.thumbnail_url ? (

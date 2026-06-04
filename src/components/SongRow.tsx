@@ -50,10 +50,16 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
   };
 
   return (
-    <div className="group grid grid-cols-[16px_4fr_3fr_minmax(0,1fr)_60px] items-center gap-4 px-4 py-2 rounded-md hover:bg-accent/50">
+    <div
+      onClick={handlePlay}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlay(); } }}
+      className="group grid grid-cols-[16px_4fr_3fr_minmax(0,1fr)_60px] items-center gap-4 px-4 py-2 rounded-md hover:bg-accent/50 cursor-pointer active:bg-accent/70 transition-colors select-none"
+    >
       <div className="text-sm text-muted-foreground text-center">
         <span className="group-hover:hidden">{isCurrent && isPlaying ? "♪" : index + 1}</span>
-        <button onClick={handlePlay} className="hidden group-hover:inline">
+        <button onClick={(e) => { e.stopPropagation(); handlePlay(); }} className="hidden group-hover:inline">
           {isCurrent && isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </button>
       </div>
@@ -70,11 +76,11 @@ export function SongRow({ song, index, queue, showAlbum = true, inPlaylistId }: 
         {showAlbum ? song.album : song.genre}
       </div>
       <div className="opacity-0 group-hover:opacity-100">
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => toggleLike.mutate()}>
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); toggleLike.mutate(); }}>
           <Heart className={isLiked ? "h-4 w-4 fill-primary text-primary" : "h-4 w-4"} />
         </Button>
       </div>
-      <div className="flex items-center gap-2 text-sm text-muted-foreground justify-end">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground justify-end" onClick={(e) => e.stopPropagation()}>
         <span>{formatDuration(song.duration)}</span>
         <SongMenu
           song={song}
