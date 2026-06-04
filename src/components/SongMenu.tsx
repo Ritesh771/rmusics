@@ -21,7 +21,8 @@ type Props = {
 };
 
 export function SongMenu({ song, inPlaylistId, trigger, align = "end", className }: Props) {
-  const { addToQueue, playNext } = usePlayer();
+  const addToQueue = usePlayer((s) => s.addToQueue);
+  const playNext = usePlayer((s) => s.playNext);
   const qc = useQueryClient();
   const { user } = useAuth();
 
