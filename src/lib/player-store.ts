@@ -49,7 +49,7 @@ type PlayerState = {
   playQueue: (songs: Song[], startIndex?: number) => void;
   playSong: (song: Song) => void;
   togglePlay: () => void;
-  next: () => void;
+  next: () => Song | null;
   prev: () => void;
   setVolume: (v: number) => void;
   toggleMute: () => void;
@@ -140,24 +140,30 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
   next: () => {
     const { queue, currentIndex, repeat, shuffle } = get();
-    if (!queue.length) return;
+    if (!queue.length) return null;
     if (currentIndex + 1 >= queue.length) {
       if (repeat === "all") {
         // Spotify-style: reshuffle the queue when looping with shuffle on
         if (shuffle && queue.length > 1) {
           const reshuffled = shuffleArr(queue, queue.length - 1);
-          // skip the just-played track at index 0; play index 1 onward fresh
-          set({ queue: reshuffled, currentIndex: 0, isPlaying: true, progress: 0 });
+          const nextIndex = Math.min(1, reshuffled.length - 1);
+          set({ queue: reshuffled, currentIndex: nextIndex, isPlaying: true, progress: 0 });
+          void recordPlay(reshuffled[nextIndex]);
+          return reshuffled[nextIndex] ?? null;
         } else {
           set({ currentIndex: 0, isPlaying: true, progress: 0 });
+          void recordPlay(queue[0]);
+          return queue[0] ?? null;
         }
       } else {
         set({ isPlaying: false });
+        return null;
       }
-      return;
     }
-    set({ currentIndex: currentIndex + 1, isPlaying: true, progress: 0 });
-    void recordPlay(get().queue[get().currentIndex]);
+    const nextIndex = currentIndex + 1;
+    set({ currentIndex: nextIndex, isPlaying: true, progress: 0 });
+    void recordPlay(queue[nextIndex]);
+    return queue[nextIndex] ?? null;
   },
   prev: () => {
     const { currentIndex, progress } = get();
