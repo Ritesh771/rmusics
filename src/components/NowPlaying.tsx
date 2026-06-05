@@ -35,7 +35,9 @@ export function NowPlaying() {
     return () => window.clearTimeout(id);
   }, [mounted, nowPlayingOpen, song]);
 
-  if (!mounted || !song) return null;
+  const shouldRender = mounted || (nowPlayingOpen && song && !closing);
+
+  if (!shouldRender || !song) return null;
 
   return <NowPlayingContent song={song} closing={closing} />;
 }
