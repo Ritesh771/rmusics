@@ -1,4 +1,4 @@
-import { usePlayer } from "@/lib/player-store";
+import { usePlayer, type Song } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -9,34 +9,67 @@ import { formatDuration } from "@/lib/owner";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type TouchEvent } from "react";
 import { cn } from "@/lib/utils";
 import { MoodBackdrop } from "./MoodBackdrop";
 
 export function NowPlaying() {
-  const {
-    nowPlayingOpen, closeNowPlaying, currentSong, isPlaying, togglePlay,
-    next, prev, progress, duration, seek, shuffle, repeat, toggleShuffle,
-    cycleRepeat, queue, currentIndex, volume, muted, setVolume, toggleMute,
-  } = usePlayer();
-  const song = currentSong();
+  const nowPlayingOpen = usePlayer((s) => s.nowPlayingOpen);
+  const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (nowPlayingOpen && song) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+
+    if (!mounted) return;
+    setClosing(true);
+    const id = window.setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, 180);
+    return () => window.clearTimeout(id);
+  }, [mounted, nowPlayingOpen, song]);
+
+  if (!mounted || !song) return null;
+
+  return <NowPlayingContent song={song} closing={closing} />;
+}
+
+function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) {
+  const closeNowPlaying = usePlayer((s) => s.closeNowPlaying);
+  const isPlaying = usePlayer((s) => s.isPlaying);
+  const togglePlay = usePlayer((s) => s.togglePlay);
+  const next = usePlayer((s) => s.next);
+  const prev = usePlayer((s) => s.prev);
+  const progress = usePlayer((s) => s.progress);
+  const duration = usePlayer((s) => s.duration);
+  const seek = usePlayer((s) => s.seek);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const repeat = usePlayer((s) => s.repeat);
+  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+  const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+  const queue = usePlayer((s) => s.queue);
+  const currentIndex = usePlayer((s) => s.currentIndex);
+  const volume = usePlayer((s) => s.volume);
+  const muted = usePlayer((s) => s.muted);
+  const setVolume = usePlayer((s) => s.setVolume);
+  const toggleMute = usePlayer((s) => s.toggleMute);
   const [showQueue, setShowQueue] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const swipeRef = useRef<HTMLDivElement | null>(null);
   const swipeDX = useRef(0);
+  const swipeRaf = useRef(0);
   const qc = useQueryClient();
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!nowPlayingOpen) {
-      // Always return to the artwork view next time the player is opened
-      setShowQueue(false);
-      swipeDX.current = 0;
-      if (swipeRef.current) swipeRef.current.style.transform = "";
-      return;
-    }
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNowPlaying(); };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -44,7 +77,14 @@ export function NowPlaying() {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [nowPlayingOpen, closeNowPlaying]);
+  }, [closeNowPlaying]);
+
+  useEffect(() => {
+    if (!closing) return;
+    setShowQueue(false);
+    swipeDX.current = 0;
+    if (swipeRef.current) swipeRef.current.style.transform = "";
+  }, [closing]);
 
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
@@ -65,29 +105,37 @@ export function NowPlaying() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });
 
-  if (!nowPlayingOpen || !song) return null;
-
-  const onTouchStart = (e: React.TouchEvent) => {
+  const onTouchStart = (e: TouchEvent) => {
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY };
     if (swipeRef.current) swipeRef.current.style.transition = "none";
   };
-  const onTouchMove = (e: React.TouchEvent) => {
+  const onTouchMove = (e: TouchEvent) => {
     if (!touchStart.current) return;
     const dx = e.touches[0].clientX - touchStart.current.x;
     const dy = e.touches[0].clientY - touchStart.current.y;
     if (Math.abs(dx) > Math.abs(dy) && swipeRef.current) {
       swipeDX.current = dx;
-      swipeRef.current.style.transform = `translate3d(${dx}px,0,0) rotate(${dx * 0.02}deg)`;
-      swipeRef.current.style.opacity = String(1 - Math.min(Math.abs(dx) / 400, 0.4));
+      if (swipeRaf.current) return;
+      swipeRaf.current = requestAnimationFrame(() => {
+        swipeRaf.current = 0;
+        const latestDX = swipeDX.current;
+        if (!swipeRef.current) return;
+        swipeRef.current.style.transform = `translate3d(${latestDX}px,0,0) rotate(${latestDX * 0.015}deg)`;
+        swipeRef.current.style.opacity = String(1 - Math.min(Math.abs(latestDX) / 500, 0.28));
+      });
     }
   };
   const onTouchEnd = () => {
     const dx = swipeDX.current;
     swipeDX.current = 0;
     touchStart.current = null;
+    if (swipeRaf.current) {
+      cancelAnimationFrame(swipeRaf.current);
+      swipeRaf.current = 0;
+    }
     if (swipeRef.current) {
-      swipeRef.current.style.transition = "transform 0.3s cubic-bezier(0.22,1,0.36,1), opacity 0.3s";
+      swipeRef.current.style.transition = "transform 0.24s cubic-bezier(0.22,1,0.36,1), opacity 0.18s ease";
       swipeRef.current.style.transform = "";
       swipeRef.current.style.opacity = "1";
     }
@@ -96,7 +144,10 @@ export function NowPlaying() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-neutral-900 via-black to-black text-white flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden">
+    <div className={cn(
+      "now-playing-sheet fixed inset-0 z-[100] bg-gradient-to-b from-neutral-900 via-black to-black text-white flex flex-col overflow-hidden",
+      closing ? "now-playing-sheet-out" : "now-playing-sheet-in",
+    )}>
       <MoodBackdrop intensity={1.2} />
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between px-4 py-3 shrink-0">
