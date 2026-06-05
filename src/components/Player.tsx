@@ -153,14 +153,14 @@ export function Player() {
     safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
     safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
     safe("previoustrack", () => prev());
-    safe("nexttrack", () => next());
+    safe("nexttrack", () => { const upcoming = next(); if (upcoming) playAudioSong(upcoming); });
     safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
     return () => {
       ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
         safe(a as MediaSessionAction, null),
       );
     };
-  }, [song?.id, isPlaying, next, prev, seek]);
+  }, [song?.id, isPlaying, next, playAudioSong, prev, seek]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -202,12 +202,19 @@ export function Player() {
     <>
       <audio
         ref={audioRef}
+        preload="auto"
+        playsInline
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
+        onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
           if (repeat === "one" && audioRef.current) {
             audioRef.current.currentTime = 0;
             audioRef.current.play();
-          } else next();
+          } else {
+            const upcoming = next();
+            if (upcoming) playAudioSong(upcoming);
+          }
         }}
       />
 
