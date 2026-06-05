@@ -49,7 +49,12 @@ export function Player() {
   // Seek
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
-      audioRef.current.currentTime = _seekTarget;
+      const a = audioRef.current;
+      if (typeof (a as any).fastSeek === "function") {
+        try { (a as any).fastSeek(_seekTarget); } catch { a.currentTime = _seekTarget; }
+      } else {
+        a.currentTime = _seekTarget;
+      }
       clearSeek();
     }
   }, [_seekTarget, clearSeek]);
