@@ -256,7 +256,10 @@ export function Player() {
           </Button>
           {/* progress hair-line */}
           <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-white/10">
-            <div className="h-full bg-white transition-all" style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }} />
+            <div
+              className="h-full origin-left bg-white transition-transform duration-150 ease-linear will-change-transform"
+              style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
+            />
           </div>
         </div>
       )}
