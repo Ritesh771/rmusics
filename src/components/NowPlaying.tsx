@@ -70,6 +70,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
   const { user } = useAuth();
 
   useEffect(() => {
+    if (closing) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNowPlaying(); };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -77,7 +78,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [closeNowPlaying]);
+  }, [closing, closeNowPlaying]);
 
   useEffect(() => {
     if (!closing) return;
