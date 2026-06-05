@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlayer } from "@/lib/player-store";
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
@@ -17,29 +17,71 @@ import {
 
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastProgressPush = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
-  const {
-    isPlaying, volume, muted, progress, duration, shuffle, repeat,
-    _seekTarget, sleepTimer, togglePlay, next, prev, setVolume, toggleMute,
-    setProgress, setDuration, toggleShuffle, cycleRepeat, seek, clearSeek,
-    setSleepTimer, currentSong, openNowPlaying, toggleQueuePanel,
-  } = usePlayer();
-  const song = currentSong();
+  const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
+  const isPlaying = usePlayer((s) => s.isPlaying);
+  const volume = usePlayer((s) => s.volume);
+  const muted = usePlayer((s) => s.muted);
+  const progress = usePlayer((s) => s.progress);
+  const duration = usePlayer((s) => s.duration);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const repeat = usePlayer((s) => s.repeat);
+  const _seekTarget = usePlayer((s) => s._seekTarget);
+  const sleepTimer = usePlayer((s) => s.sleepTimer);
+  const togglePlay = usePlayer((s) => s.togglePlay);
+  const next = usePlayer((s) => s.next);
+  const prev = usePlayer((s) => s.prev);
+  const setVolume = usePlayer((s) => s.setVolume);
+  const toggleMute = usePlayer((s) => s.toggleMute);
+  const setProgress = usePlayer((s) => s.setProgress);
+  const setDuration = usePlayer((s) => s.setDuration);
+  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+  const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+  const seek = usePlayer((s) => s.seek);
+  const clearSeek = usePlayer((s) => s.clearSeek);
+  const setSleepTimer = usePlayer((s) => s.setSleepTimer);
+  const openNowPlaying = usePlayer((s) => s.openNowPlaying);
+  const toggleQueuePanel = usePlayer((s) => s.toggleQueuePanel);
   const qc = useQueryClient();
   const { user } = useAuth();
+
+  const playAudioSong = useCallback((targetSong: typeof song, reset = true) => {
+    const audio = audioRef.current;
+    if (!audio || !targetSong) return;
+    if (audio.dataset.songId !== targetSong.id) {
+      audio.dataset.songId = targetSong.id;
+      audio.src = targetSong.audio_url;
+      audio.load();
+    }
+    if (reset) audio.currentTime = 0;
+    audio.play().catch(() => {});
+  }, []);
+
+  const publishAudioTime = useCallback((force = false) => {
+    const audio = audioRef.current;
+    if (!audio || scrubbing) return;
+    const now = performance.now();
+    if (force || now - lastProgressPush.current > 120 || Math.abs(usePlayer.getState().progress - audio.currentTime) > 0.35) {
+      lastProgressPush.current = now;
+      setProgress(audio.currentTime);
+    }
+  }, [scrubbing, setProgress]);
 
   // Audio src/play control
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !song) return;
-    if (audio.src !== song.audio_url) {
+    if (audio.dataset.songId !== song.id) {
+      audio.dataset.songId = song.id;
       audio.src = song.audio_url;
       audio.currentTime = 0;
+      audio.load();
     }
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
-  }, [song?.id, isPlaying]);
+  }, [song?.id, song?.audio_url, isPlaying]);
 
   // Volume
   useEffect(() => {
@@ -64,13 +106,12 @@ export function Player() {
     if (!isPlaying) return;
     let raf = 0;
     const tick = () => {
-      const a = audioRef.current;
-      if (a && !scrubbing) setProgress(a.currentTime);
+      publishAudioTime();
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, scrubbing, setProgress]);
+  }, [isPlaying, publishAudioTime]);
 
   // Sleep timer
   useEffect(() => {
@@ -112,14 +153,14 @@ export function Player() {
     safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
     safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
     safe("previoustrack", () => prev());
-    safe("nexttrack", () => next());
+    safe("nexttrack", () => { const upcoming = next(); if (upcoming) playAudioSong(upcoming); });
     safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
     return () => {
       ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
         safe(a as MediaSessionAction, null),
       );
     };
-  }, [song?.id, isPlaying, next, prev, seek]);
+  }, [song?.id, isPlaying, next, playAudioSong, prev, seek]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -161,12 +202,19 @@ export function Player() {
     <>
       <audio
         ref={audioRef}
+        preload="auto"
+        playsInline
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
+        onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
           if (repeat === "one" && audioRef.current) {
             audioRef.current.currentTime = 0;
             audioRef.current.play();
-          } else next();
+          } else {
+            const upcoming = next();
+            if (upcoming) playAudioSong(upcoming);
+          }
         }}
       />
 
@@ -208,7 +256,10 @@ export function Player() {
           </Button>
           {/* progress hair-line */}
           <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-white/10">
-            <div className="h-full bg-white transition-all" style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }} />
+            <div
+              className="h-full origin-left bg-white transition-transform duration-150 ease-linear will-change-transform"
+              style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
+            />
           </div>
         </div>
       )}
