@@ -139,11 +139,21 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set((s) => ({ isPlaying: !s.isPlaying }));
   },
   next: () => {
-    const { queue, currentIndex, repeat } = get();
+    const { queue, currentIndex, repeat, shuffle } = get();
     if (!queue.length) return;
     if (currentIndex + 1 >= queue.length) {
-      if (repeat === "all") set({ currentIndex: 0, isPlaying: true, progress: 0 });
-      else set({ isPlaying: false });
+      if (repeat === "all") {
+        // Spotify-style: reshuffle the queue when looping with shuffle on
+        if (shuffle && queue.length > 1) {
+          const reshuffled = shuffleArr(queue, queue.length - 1);
+          // skip the just-played track at index 0; play index 1 onward fresh
+          set({ queue: reshuffled, currentIndex: 0, isPlaying: true, progress: 0 });
+        } else {
+          set({ currentIndex: 0, isPlaying: true, progress: 0 });
+        }
+      } else {
+        set({ isPlaying: false });
+      }
       return;
     }
     set({ currentIndex: currentIndex + 1, isPlaying: true, progress: 0 });
