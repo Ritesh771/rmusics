@@ -177,17 +177,17 @@ export function Player() {
     const safe = (action: MediaSessionAction, handler: ((details: any) => void) | null) => {
       try { ms.setActionHandler(action, handler as any); } catch {}
     };
-    safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
+    safe("play", () => { audioRef.current?.play().then(() => usePlayer.setState({ isPlaying: true })).catch(() => {}); });
     safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
-    safe("previoustrack", () => prev());
-    safe("nexttrack", () => { const upcoming = next(); if (upcoming) playAudioSong(upcoming); });
+    safe("previoustrack", goToPrevious);
+    safe("nexttrack", advanceToNext);
     safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
     return () => {
       ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
         safe(a as MediaSessionAction, null),
       );
     };
-  }, [song?.id, isPlaying, next, playAudioSong, prev, seek]);
+  }, [song?.id, isPlaying, advanceToNext, goToPrevious, seek]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -231,7 +231,19 @@ export function Player() {
         ref={audioRef}
         preload="auto"
         playsInline
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          const audio = e.currentTarget;
+          const loadedSong = usePlayer.getState().currentSong();
+          const realDuration = Number.isFinite(audio.duration) ? audio.duration : (loadedSong?.duration ?? 0);
+          setDuration(realDuration);
+          const pending = pendingSeekRef.current;
+          if (pending != null) {
+            pendingSeekRef.current = null;
+            seekAudio(audio, Math.min(pending, realDuration || pending));
+          }
+        }}
+        onPlay={() => usePlayer.setState({ isPlaying: true })}
+        onPause={() => { if (!audioRef.current?.ended) usePlayer.setState({ isPlaying: false }); }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
         onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
@@ -239,8 +251,7 @@ export function Player() {
             audioRef.current.currentTime = 0;
             audioRef.current.play();
           } else {
-            const upcoming = next();
-            if (upcoming) playAudioSong(upcoming);
+            advanceToNext();
           }
         }}
       />
