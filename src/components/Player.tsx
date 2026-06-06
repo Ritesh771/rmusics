@@ -339,7 +339,7 @@ export function Player() {
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleShuffle}>
             <Shuffle className={shuffle ? "h-4 w-4 text-primary" : "h-4 w-4"} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={prev}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToPrevious}>
             <SkipBack className="h-4 w-4" />
           </Button>
           <Button
@@ -350,7 +350,7 @@ export function Player() {
           >
             {isPlaying ? <Pause className="h-4 w-4 fill-black" /> : <Play className="h-4 w-4 fill-black" />}
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={next}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={advanceToNext}>
             <SkipForward className="h-4 w-4" />
           </Button>
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cycleRepeat}>
