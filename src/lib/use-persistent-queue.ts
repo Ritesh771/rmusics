@@ -2,6 +2,49 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer, type Song, type RepeatMode } from "./player-store";
 
+const STORAGE_KEY = "r-musics-player-snapshot-v2";
+
+type PlayerSnapshot = {
+  userId: string;
+  queue: Song[];
+  currentIndex: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+  progress: number;
+  sleepTimer: number | null;
+  updatedAt: number;
+};
+
+function readLocalSnapshot(userId: string): PlayerSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null") as PlayerSnapshot | null;
+    if (!parsed || parsed.userId !== userId || !Array.isArray(parsed.queue) || !parsed.queue.length) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalSnapshot(userId: string) {
+  if (typeof window === "undefined") return;
+  const s = usePlayer.getState();
+  if (!s.queue.length || s.currentIndex < 0) return;
+  const snapshot: PlayerSnapshot = {
+    userId,
+    queue: s.queue,
+    currentIndex: s.currentIndex,
+    shuffle: s.shuffle,
+    repeat: s.repeat,
+    progress: s.progress,
+    sleepTimer: s.sleepTimer,
+    updatedAt: Date.now(),
+  };
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {}
+}
+
 /**
  * Persists & restores the player queue + playback state per user via `user_queue`.
  * - Loads once when the user logs in (hydrates the store without auto-playing).
@@ -20,25 +63,41 @@ export function usePersistentQueue(userId: string | null) {
     if (hydratedFor.current === userId) return;
     hydratedFor.current = userId;
     (async () => {
+      if (usePlayer.getState().queue.length) return;
       const { data } = await supabase
         .from("user_queue")
-        .select("queue, current_index, shuffle, repeat, progress, sleep_until")
+        .select("queue, current_index, shuffle, repeat, progress, sleep_until, updated_at")
         .eq("user_id", userId)
         .maybeSingle();
-      if (!data) return;
-      const queue = (data.queue as unknown as Song[]) ?? [];
+      const local = readLocalSnapshot(userId);
+      const remote = data
+        ? {
+            userId,
+            queue: (data.queue as unknown as Song[]) ?? [],
+            currentIndex: data.current_index ?? 0,
+            shuffle: !!data.shuffle,
+            repeat: ((data.repeat as RepeatMode) ?? "off") as RepeatMode,
+            progress: Number(data.progress) || 0,
+            sleepTimer: data.sleep_until ? new Date(data.sleep_until).getTime() : null,
+            updatedAt: Date.parse(data.updated_at) || 0,
+          }
+        : null;
+      const snapshot = local && (!remote || local.updatedAt >= remote.updatedAt) ? local : remote;
+      if (!snapshot || usePlayer.getState().queue.length) return;
+      const queue = snapshot.queue;
       if (!queue.length) return;
-      const idx = Math.min(Math.max(data.current_index ?? 0, 0), queue.length - 1);
+      const idx = Math.min(Math.max(snapshot.currentIndex ?? 0, 0), queue.length - 1);
       usePlayer.getState().hydrate({
         queue,
         originalQueue: queue,
         currentIndex: idx,
-        shuffle: !!data.shuffle,
-        repeat: (data.repeat as RepeatMode) ?? "off",
-        progress: Number(data.progress) || 0,
-        _seekTarget: Number(data.progress) || 0,
+        shuffle: snapshot.shuffle,
+        repeat: snapshot.repeat,
+        progress: snapshot.progress,
+        duration: queue[idx]?.duration ?? 0,
+        _seekTarget: snapshot.progress > 0 ? snapshot.progress : null,
         isPlaying: false,
-        sleepTimer: data.sleep_until ? new Date(data.sleep_until).getTime() : null,
+        sleepTimer: snapshot.sleepTimer,
       });
     })();
   }, [userId]);
