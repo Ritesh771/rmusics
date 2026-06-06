@@ -111,11 +111,14 @@ export function usePersistentQueue(userId: string | null) {
         state.currentIndex !== prev.currentIndex ||
         state.shuffle !== prev.shuffle ||
         state.repeat !== prev.repeat ||
+        state.sleepTimer !== prev.sleepTimer ||
         Math.floor(state.progress) !== Math.floor(prev.progress);
       if (!watched) return;
+      writeLocalSnapshot(userId);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(async () => {
         const s = usePlayer.getState();
+        writeLocalSnapshot(userId);
         await supabase.from("user_queue").upsert({
           user_id: userId,
           queue: s.queue as unknown as any,
@@ -129,6 +132,7 @@ export function usePersistentQueue(userId: string | null) {
       }, 1500);
     });
     return () => {
+      writeLocalSnapshot(userId);
       unsub();
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
