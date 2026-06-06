@@ -212,16 +212,32 @@ export function Player() {
           : [],
       });
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch {}
+    } catch {
+      // Some browsers reject remote artwork metadata.
+    }
     const ms = navigator.mediaSession;
-    const safe = (action: MediaSessionAction, handler: ((details: any) => void) | null) => {
-      try { ms.setActionHandler(action, handler as any); } catch {}
+    const safe = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        // Unsupported action on this browser.
+      }
     };
-    safe("play", () => { audioRef.current?.play().then(() => usePlayer.setState({ isPlaying: true })).catch(() => {}); });
-    safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
+    safe("play", () => {
+      audioRef.current
+        ?.play()
+        .then(() => usePlayer.setState({ isPlaying: true }))
+        .catch(() => undefined);
+    });
+    safe("pause", () => {
+      audioRef.current?.pause();
+      usePlayer.setState({ isPlaying: false });
+    });
     safe("previoustrack", goToPrevious);
     safe("nexttrack", advanceToNext);
-    safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
+    safe("seekto", (e) => {
+      if (typeof e.seekTime === "number") seek(e.seekTime);
+    });
     return () => {
       ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
         safe(a as MediaSessionAction, null),
