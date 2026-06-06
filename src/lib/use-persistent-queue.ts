@@ -105,6 +105,9 @@ export function usePersistentQueue(userId: string | null) {
   // Save on changes (debounced)
   useEffect(() => {
     if (!userId) return;
+    const flushLocal = () => writeLocalSnapshot(userId);
+    window.addEventListener("pagehide", flushLocal);
+    document.addEventListener("visibilitychange", flushLocal);
     const unsub = usePlayer.subscribe((state, prev) => {
       const watched =
         state.queue !== prev.queue ||
@@ -133,6 +136,8 @@ export function usePersistentQueue(userId: string | null) {
     });
     return () => {
       writeLocalSnapshot(userId);
+      window.removeEventListener("pagehide", flushLocal);
+      document.removeEventListener("visibilitychange", flushLocal);
       unsub();
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
