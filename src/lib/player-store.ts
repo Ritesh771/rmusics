@@ -50,7 +50,7 @@ type PlayerState = {
   playSong: (song: Song) => void;
   togglePlay: () => void;
   next: () => Song | null;
-  prev: () => void;
+  prev: () => Song | null;
   setVolume: (v: number) => void;
   toggleMute: () => void;
   setProgress: (p: number) => void;
@@ -126,11 +126,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const { shuffle } = get();
     const q = shuffle ? shuffleArr(songs, startIndex) : songs;
     const idx = shuffle ? 0 : startIndex;
-    set({ queue: q, originalQueue: songs, currentIndex: idx, isPlaying: true, progress: 0 });
+    set({ queue: q, originalQueue: songs, currentIndex: idx, isPlaying: true, progress: 0, duration: q[idx]?.duration ?? 0 });
     void recordPlay(q[idx]);
   },
   playSong: (song) => {
-    set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0 });
+    set({ queue: [song], originalQueue: [song], currentIndex: 0, isPlaying: true, progress: 0, duration: song.duration ?? 0 });
     void recordPlay(song);
   },
   togglePlay: () => {
@@ -147,11 +147,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
         if (shuffle && queue.length > 1) {
           const reshuffled = shuffleArr(queue, queue.length - 1);
           const nextIndex = Math.min(1, reshuffled.length - 1);
-          set({ queue: reshuffled, currentIndex: nextIndex, isPlaying: true, progress: 0 });
+          set({ queue: reshuffled, currentIndex: nextIndex, isPlaying: true, progress: 0, duration: reshuffled[nextIndex]?.duration ?? 0 });
           void recordPlay(reshuffled[nextIndex]);
           return reshuffled[nextIndex] ?? null;
         } else {
-          set({ currentIndex: 0, isPlaying: true, progress: 0 });
+          set({ currentIndex: 0, isPlaying: true, progress: 0, duration: queue[0]?.duration ?? 0 });
           void recordPlay(queue[0]);
           return queue[0] ?? null;
         }
@@ -161,21 +161,25 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       }
     }
     const nextIndex = currentIndex + 1;
-    set({ currentIndex: nextIndex, isPlaying: true, progress: 0 });
+    set({ currentIndex: nextIndex, isPlaying: true, progress: 0, duration: queue[nextIndex]?.duration ?? 0 });
     void recordPlay(queue[nextIndex]);
     return queue[nextIndex] ?? null;
   },
   prev: () => {
-    const { currentIndex, progress } = get();
+    const { queue, currentIndex, progress } = get();
+    if (!queue.length || currentIndex < 0) return null;
     if (progress > 3) {
       set({ _seekTarget: 0, progress: 0 });
-      return;
+      return queue[currentIndex] ?? null;
     }
     if (currentIndex <= 0) {
       set({ _seekTarget: 0, progress: 0 });
-      return;
+      return queue[0] ?? null;
     }
-    set({ currentIndex: currentIndex - 1, isPlaying: true, progress: 0 });
+    const prevIndex = currentIndex - 1;
+    set({ currentIndex: prevIndex, isPlaying: true, progress: 0, duration: queue[prevIndex]?.duration ?? 0 });
+    void recordPlay(queue[prevIndex]);
+    return queue[prevIndex] ?? null;
   },
   setVolume: (v) => set({ volume: v, muted: v === 0 }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),
