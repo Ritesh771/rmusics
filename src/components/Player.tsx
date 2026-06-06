@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePlayer } from "@/lib/player-store";
+import { usePlayer, type Song } from "@/lib/player-store";
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Heart, Clock, Music
@@ -18,6 +18,8 @@ import {
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastProgressPush = useRef(0);
+  const pendingSeekRef = useRef<number | null>(null);
+  const playRequestRef = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -47,17 +49,39 @@ export function Player() {
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const playAudioSong = useCallback((targetSong: typeof song, reset = true) => {
+  const seekAudio = useCallback((audio: HTMLAudioElement, time: number) => {
+    const target = Math.max(0, Number.isFinite(time) ? time : 0);
+    if (typeof (audio as any).fastSeek === "function") {
+      try { (audio as any).fastSeek(target); return; } catch {}
+    }
+    try { audio.currentTime = target; } catch { pendingSeekRef.current = target; }
+  }, []);
+
+  const playAudioSong = useCallback((targetSong: Song | null, seekTo = 0) => {
     const audio = audioRef.current;
     if (!audio || !targetSong) return;
+    const requestId = ++playRequestRef.current;
     if (audio.dataset.songId !== targetSong.id) {
       audio.dataset.songId = targetSong.id;
       audio.src = targetSong.audio_url;
       audio.load();
     }
-    if (reset) audio.currentTime = 0;
-    audio.play().catch(() => {});
-  }, []);
+    pendingSeekRef.current = null;
+    seekAudio(audio, seekTo);
+    audio.play().then(() => {
+      if (requestId === playRequestRef.current) usePlayer.setState({ isPlaying: true });
+    }).catch(() => {});
+  }, [seekAudio]);
+
+  const advanceToNext = useCallback(() => {
+    const upcoming = next();
+    if (upcoming) playAudioSong(upcoming, 0);
+  }, [next, playAudioSong]);
+
+  const goToPrevious = useCallback(() => {
+    const previous = prev();
+    if (previous) playAudioSong(previous, 0);
+  }, [prev, playAudioSong]);
 
   const publishAudioTime = useCallback((force = false) => {
     const audio = audioRef.current;
@@ -72,16 +96,24 @@ export function Player() {
   // Audio src/play control
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !song) return;
+    if (!audio) return;
+    if (!song) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.dataset.songId = "";
+      return;
+    }
     if (audio.dataset.songId !== song.id) {
       audio.dataset.songId = song.id;
       audio.src = song.audio_url;
-      audio.currentTime = 0;
+      const resumeAt = Math.max(0, usePlayer.getState().progress || 0);
+      pendingSeekRef.current = resumeAt;
       audio.load();
+      setDuration(song.duration ?? 0);
     }
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
-  }, [song?.id, song?.audio_url, isPlaying]);
+  }, [song?.id, song?.audio_url, isPlaying, setDuration]);
 
   // Volume
   useEffect(() => {
@@ -91,15 +123,10 @@ export function Player() {
   // Seek
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
-      const a = audioRef.current;
-      if (typeof (a as any).fastSeek === "function") {
-        try { (a as any).fastSeek(_seekTarget); } catch { a.currentTime = _seekTarget; }
-      } else {
-        a.currentTime = _seekTarget;
-      }
+      seekAudio(audioRef.current, _seekTarget);
       clearSeek();
     }
-  }, [_seekTarget, clearSeek]);
+  }, [_seekTarget, clearSeek, seekAudio]);
 
   // Smooth progress via rAF — avoids the choppy ~4Hz timeupdate event
   useEffect(() => {
