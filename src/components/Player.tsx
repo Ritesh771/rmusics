@@ -20,6 +20,7 @@ export function Player() {
   const lastProgressPush = useRef(0);
   const pendingSeekRef = useRef<number | null>(null);
   const playRequestRef = useRef(0);
+  const suppressPauseUntil = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -62,6 +63,7 @@ export function Player() {
     if (!audio || !targetSong) return;
     const requestId = ++playRequestRef.current;
     if (audio.dataset.songId !== targetSong.id) {
+      suppressPauseUntil.current = Date.now() + 1500;
       audio.dataset.songId = targetSong.id;
       audio.src = targetSong.audio_url;
       audio.load();
@@ -104,6 +106,7 @@ export function Player() {
       return;
     }
     if (audio.dataset.songId !== song.id) {
+      if (isPlaying) suppressPauseUntil.current = Date.now() + 1500;
       audio.dataset.songId = song.id;
       audio.src = song.audio_url;
       const resumeAt = Math.max(0, usePlayer.getState().progress || 0);
@@ -242,8 +245,11 @@ export function Player() {
             seekAudio(audio, Math.min(pending, realDuration || pending));
           }
         }}
-        onPlay={() => usePlayer.setState({ isPlaying: true })}
-        onPause={() => { if (!audioRef.current?.ended) usePlayer.setState({ isPlaying: false }); }}
+        onPlay={() => { suppressPauseUntil.current = 0; usePlayer.setState({ isPlaying: true }); }}
+        onPause={() => {
+          if (Date.now() < suppressPauseUntil.current || audioRef.current?.ended) return;
+          usePlayer.setState({ isPlaying: false });
+        }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
         onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
