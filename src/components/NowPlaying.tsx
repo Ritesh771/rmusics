@@ -264,7 +264,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
               {queue.map((s, i) => (
                 <button
                   key={s.id + i}
-                  onClick={() => usePlayer.setState({ currentIndex: i, isPlaying: true, progress: 0 })}
+                  onClick={() => usePlayer.setState({ currentIndex: i, isPlaying: true, progress: 0, duration: s.duration ?? 0 })}
                   className={cn(
                     "w-full flex items-center gap-3 p-2 rounded hover:bg-white/10 text-left",
                     i === currentIndex && "bg-white/10"

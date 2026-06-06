@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePlayer } from "@/lib/player-store";
+import { usePlayer, type Song } from "@/lib/player-store";
 import {
-  Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
-  Volume2, VolumeX, Heart, Clock, Music
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  Repeat,
+  Repeat1,
+  Volume2,
+  VolumeX,
+  Heart,
+  Clock,
+  Music,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -12,12 +22,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+type FastSeekAudio = HTMLAudioElement & { fastSeek?: (time: number) => void };
 
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastProgressPush = useRef(0);
+  const pendingSeekRef = useRef<number | null>(null);
+  const playRequestRef = useRef(0);
+  const suppressPauseUntil = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -47,23 +65,68 @@ export function Player() {
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const playAudioSong = useCallback((targetSong: typeof song, reset = true) => {
-    const audio = audioRef.current;
-    if (!audio || !targetSong) return;
-    if (audio.dataset.songId !== targetSong.id) {
-      audio.dataset.songId = targetSong.id;
-      audio.src = targetSong.audio_url;
-      audio.load();
+  const seekAudio = useCallback((audio: HTMLAudioElement, time: number) => {
+    const target = Math.max(0, Number.isFinite(time) ? time : 0);
+    const fastAudio = audio as FastSeekAudio;
+    if (typeof fastAudio.fastSeek === "function") {
+      try {
+        fastAudio.fastSeek(target);
+        return;
+      } catch {
+        // Fall back to currentTime below.
+      }
     }
-    if (reset) audio.currentTime = 0;
-    audio.play().catch(() => {});
+    try {
+      audio.currentTime = target;
+    } catch {
+      pendingSeekRef.current = target;
+    }
   }, []);
+
+  const playAudioSong = useCallback(
+    (targetSong: Song | null, seekTo = 0) => {
+      const audio = audioRef.current;
+      if (!audio || !targetSong) return;
+      const requestId = ++playRequestRef.current;
+      if (audio.dataset.songId !== targetSong.id) {
+        suppressPauseUntil.current = Date.now() + 1500;
+        audio.dataset.songId = targetSong.id;
+        audio.src = targetSong.audio_url;
+        audio.load();
+      }
+      pendingSeekRef.current = null;
+      seekAudio(audio, seekTo);
+      audio
+        .play()
+        .then(() => {
+          if (requestId === playRequestRef.current) {
+            usePlayer.setState({ isPlaying: true });
+          }
+        })
+        .catch(() => undefined);
+    },
+    [seekAudio],
+  );
+
+  const advanceToNext = useCallback(() => {
+    const upcoming = next();
+    if (upcoming) playAudioSong(upcoming, 0);
+  }, [next, playAudioSong]);
+
+  const goToPrevious = useCallback(() => {
+    const previous = prev();
+    if (previous) playAudioSong(previous, 0);
+  }, [prev, playAudioSong]);
 
   const publishAudioTime = useCallback((force = false) => {
     const audio = audioRef.current;
     if (!audio || scrubbing) return;
     const now = performance.now();
-    if (force || now - lastProgressPush.current > 120 || Math.abs(usePlayer.getState().progress - audio.currentTime) > 0.35) {
+    if (
+      force ||
+      now - lastProgressPush.current > 120 ||
+      Math.abs(usePlayer.getState().progress - audio.currentTime) > 0.35
+    ) {
       lastProgressPush.current = now;
       setProgress(audio.currentTime);
     }
@@ -72,16 +135,25 @@ export function Player() {
   // Audio src/play control
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !song) return;
+    if (!audio) return;
+    if (!song) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.dataset.songId = "";
+      return;
+    }
     if (audio.dataset.songId !== song.id) {
+      if (isPlaying) suppressPauseUntil.current = Date.now() + 1500;
       audio.dataset.songId = song.id;
       audio.src = song.audio_url;
-      audio.currentTime = 0;
+      const resumeAt = Math.max(0, usePlayer.getState().progress || 0);
+      pendingSeekRef.current = resumeAt;
       audio.load();
+      setDuration(song.duration ?? 0);
     }
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
-  }, [song?.id, song?.audio_url, isPlaying]);
+  }, [song?.id, song?.audio_url, isPlaying, setDuration]);
 
   // Volume
   useEffect(() => {
@@ -91,15 +163,10 @@ export function Player() {
   // Seek
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
-      const a = audioRef.current;
-      if (typeof (a as any).fastSeek === "function") {
-        try { (a as any).fastSeek(_seekTarget); } catch { a.currentTime = _seekTarget; }
-      } else {
-        a.currentTime = _seekTarget;
-      }
+      seekAudio(audioRef.current, _seekTarget);
       clearSeek();
     }
-  }, [_seekTarget, clearSeek]);
+  }, [_seekTarget, clearSeek, seekAudio]);
 
   // Smooth progress via rAF — avoids the choppy ~4Hz timeupdate event
   useEffect(() => {
@@ -145,22 +212,38 @@ export function Player() {
           : [],
       });
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch {}
+    } catch {
+      // Some browsers reject remote artwork metadata.
+    }
     const ms = navigator.mediaSession;
-    const safe = (action: MediaSessionAction, handler: ((details: any) => void) | null) => {
-      try { ms.setActionHandler(action, handler as any); } catch {}
+    const safe = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        // Unsupported action on this browser.
+      }
     };
-    safe("play", () => { audioRef.current?.play().catch(() => {}); usePlayer.setState({ isPlaying: true }); });
-    safe("pause", () => { audioRef.current?.pause(); usePlayer.setState({ isPlaying: false }); });
-    safe("previoustrack", () => prev());
-    safe("nexttrack", () => { const upcoming = next(); if (upcoming) playAudioSong(upcoming); });
-    safe("seekto", (e: any) => { if (typeof e?.seekTime === "number") seek(e.seekTime); });
+    safe("play", () => {
+      audioRef.current
+        ?.play()
+        .then(() => usePlayer.setState({ isPlaying: true }))
+        .catch(() => undefined);
+    });
+    safe("pause", () => {
+      audioRef.current?.pause();
+      usePlayer.setState({ isPlaying: false });
+    });
+    safe("previoustrack", goToPrevious);
+    safe("nexttrack", advanceToNext);
+    safe("seekto", (e) => {
+      if (typeof e.seekTime === "number") seek(e.seekTime);
+    });
     return () => {
       ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
         safe(a as MediaSessionAction, null),
       );
     };
-  }, [song?.id, isPlaying, next, playAudioSong, prev, seek]);
+  }, [song?.id, isPlaying, advanceToNext, goToPrevious, seek]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -204,7 +287,22 @@ export function Player() {
         ref={audioRef}
         preload="auto"
         playsInline
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          const audio = e.currentTarget;
+          const loadedSong = usePlayer.getState().currentSong();
+          const realDuration = Number.isFinite(audio.duration) ? audio.duration : (loadedSong?.duration ?? 0);
+          setDuration(realDuration);
+          const pending = pendingSeekRef.current;
+          if (pending != null) {
+            pendingSeekRef.current = null;
+            seekAudio(audio, Math.min(pending, realDuration || pending));
+          }
+        }}
+        onPlay={() => { suppressPauseUntil.current = 0; usePlayer.setState({ isPlaying: true }); }}
+        onPause={() => {
+          if (Date.now() < suppressPauseUntil.current || audioRef.current?.ended) return;
+          usePlayer.setState({ isPlaying: false });
+        }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
         onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
@@ -212,8 +310,7 @@ export function Player() {
             audioRef.current.currentTime = 0;
             audioRef.current.play();
           } else {
-            const upcoming = next();
-            if (upcoming) playAudioSong(upcoming);
+            advanceToNext();
           }
         }}
       />
@@ -301,7 +398,7 @@ export function Player() {
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleShuffle}>
             <Shuffle className={shuffle ? "h-4 w-4 text-primary" : "h-4 w-4"} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={prev}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToPrevious}>
             <SkipBack className="h-4 w-4" />
           </Button>
           <Button
@@ -312,7 +409,7 @@ export function Player() {
           >
             {isPlaying ? <Pause className="h-4 w-4 fill-black" /> : <Play className="h-4 w-4 fill-black" />}
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={next}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={advanceToNext}>
             <SkipForward className="h-4 w-4" />
           </Button>
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cycleRepeat}>

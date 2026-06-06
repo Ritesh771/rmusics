@@ -67,7 +67,7 @@ export function QueuePanel() {
                       key={s.id + absIdx}
                       id={String(absIdx)}
                       song={s}
-                      onJump={() => usePlayer.setState({ currentIndex: absIdx, isPlaying: true, progress: 0 })}
+                      onJump={() => usePlayer.setState({ currentIndex: absIdx, isPlaying: true, progress: 0, duration: s.duration ?? 0 })}
                       onRemove={() => removeFromQueue(absIdx)}
                     />
                   );
