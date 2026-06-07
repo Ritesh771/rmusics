@@ -241,3 +241,9 @@ button, a { transition: background-color 200ms ease, color 200ms ease, transform
     animation: none !important;
   }
 }
+
+/* Hide Lovable tagger badge and UI elements */
+[id*="lovable"], [id*="component-tagger"] {
+  display: none !important;
+  pointer-events: none !important;
+}
