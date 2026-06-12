@@ -57,11 +57,9 @@ function LoginPage() {
           By continuing you agree to our terms and privacy policy.
         </p>
         <div className="mt-6 pt-5 border-t border-white/5 flex items-center justify-center gap-3">
-          <img
-            src="https://github.com/Ritesh771.png"
-            alt="Ritesh N."
-            className="h-9 w-9 rounded-full shadow-md object-cover"
-          />
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-fuchsia-500 flex items-center justify-center text-sm font-bold text-primary-foreground shadow-md">
+            R
+          </div>
           <div className="text-left leading-tight">
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Developed by</div>
             <a
