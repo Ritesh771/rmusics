@@ -4,7 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
-import { Music, Play, Pencil, Trash2, Share2 } from "lucide-react";
+import { Music, Play, Pencil, Trash2, Share2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,41 @@ function PlaylistPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const playQueue = usePlayer((s) => s.playQueue);
+  const [downloading, setDownloading] = useState(false);
+  const [dlProgress, setDlProgress] = useState(0);
+
+  const downloadAll = async (list: Song[]) => {
+    if (!list.length || downloading) return;
+    setDownloading(true);
+    setDlProgress(0);
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i];
+        try {
+          const res = await fetch(s.audio_url);
+          if (!res.ok) throw new Error(String(res.status));
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const ext = (s.audio_url.split(".").pop() || "mp3").split("?")[0].slice(0, 4);
+          a.href = url;
+          a.download = `${(s.artist ? s.artist + " - " : "")}${s.title}.${ext}`.replace(/[\\/:*?"<>|]/g, "_");
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch (err) {
+          console.error("Download failed for", s.title, err);
+          toast.error(`Failed: ${s.title}`);
+        }
+        setDlProgress(Math.round(((i + 1) / list.length) * 100));
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      toast.success("Downloads complete");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const { data: playlist } = useQuery({
     queryKey: ["playlist", id, "meta"],
@@ -118,6 +153,17 @@ function PlaylistPage() {
             navigator.clipboard.writeText(window.location.href);
             toast.success("Link copied");
           }}><Share2 className="h-5 w-5" /></Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => downloadAll(songs)}
+            disabled={!songs.length || downloading}
+            className="gap-2"
+            title="Download all songs"
+          >
+            <Download className="h-5 w-5" />
+            {downloading ? `Downloading ${dlProgress}%` : "Download all"}
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => {
             if (confirm("Delete this playlist?")) del.mutate();
           }}><Trash2 className="h-5 w-5" /></Button>
