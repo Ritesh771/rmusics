@@ -191,6 +191,54 @@ export function Player() {
     return () => clearInterval(id);
   }, [sleepTimer]);
 
+  // Background playback healer — setInterval keeps ticking (throttled to ~1Hz)
+  // when the tab is hidden or the phone screen is locked, unlike rAF which pauses.
+  // If audio silently stalled, resume it; if it ended without firing onEnded
+  // in background, advance to the next track (Spotify-style continuous playback).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      const state = usePlayer.getState();
+      if (!state.queue[state.currentIndex]) return;
+      // Sync progress from the audio element (rAF is paused in background)
+      if (!scrubbing && Math.abs(state.progress - audio.currentTime) > 0.5) {
+        setProgress(audio.currentTime);
+      }
+      if (audio.ended) {
+        if (repeat === "one") {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        } else {
+          advanceToNext();
+        }
+        return;
+      }
+      // Heal accidental pause: user intent is playing but element is paused.
+      if (state.isPlaying && audio.paused && Date.now() > suppressPauseUntil.current) {
+        audio.play().catch(() => {});
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [advanceToNext, repeat, scrubbing, setProgress]);
+
+  // Refresh audio state when the tab returns to foreground so the UI matches reality.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (document.visibilityState === "visible") {
+        setProgress(audio.currentTime);
+        if (usePlayer.getState().isPlaying && audio.paused) {
+          audio.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [setProgress]);
+
   // MediaSession — lock-screen / notification controls + reliable background playback
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
