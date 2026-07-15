@@ -211,7 +211,20 @@ export function Player() {
       const audio = audioRef.current;
       if (!audio) return;
       const state = usePlayer.getState();
-      if (!state.queue[state.currentIndex]) return;
+      const currentSong = state.queue[state.currentIndex];
+      if (!currentSong) return;
+      // Reconciliation: if the audio element is playing a different song
+      // than what the store thinks is current, resync the src. This keeps
+      // UI seek/progress/queue in lock-step with the actual audio.
+      if (audio.dataset.songId !== currentSong.id) {
+        suppressPauseUntil.current = Date.now() + 1500;
+        audio.dataset.songId = currentSong.id;
+        audio.src = streamUrl(currentSong.audio_url);
+        pendingSeekRef.current = Math.max(0, state.progress || 0);
+        audio.load();
+        if (state.isPlaying) audio.play().catch(() => {});
+        return;
+      }
       // Sync progress from the audio element (rAF is paused in background)
       if (!scrubbing && Math.abs(state.progress - audio.currentTime) > 0.5) {
         setProgress(audio.currentTime);
