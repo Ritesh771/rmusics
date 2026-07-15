@@ -105,7 +105,21 @@ export function usePersistentQueue(userId: string | null) {
   // Save on changes (debounced)
   useEffect(() => {
     if (!userId) return;
-    const flushLocal = () => writeLocalSnapshot(userId);
+    const flushLocal = () => {
+      // Capture the latest audio-element position before serialising so a
+      // reload picks up exactly where playback was, not the last debounced
+      // progress push (which lags by up to ~120ms).
+      const audio = typeof document !== "undefined"
+        ? (document.querySelector("audio") as HTMLAudioElement | null)
+        : null;
+      if (audio && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
+        const s = usePlayer.getState();
+        if (Math.abs(s.progress - audio.currentTime) > 0.25) {
+          usePlayer.setState({ progress: audio.currentTime });
+        }
+      }
+      writeLocalSnapshot(userId);
+    };
     window.addEventListener("pagehide", flushLocal);
     document.addEventListener("visibilitychange", flushLocal);
     const unsub = usePlayer.subscribe((state, prev) => {
