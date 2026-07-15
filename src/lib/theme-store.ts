@@ -39,7 +39,7 @@ function subscribe(cb: () => void) {
 }
 
 export function useTheme(): Theme {
-  const theme = useSyncExternalStore(subscribe, () => current, () => "dark");
+  const theme = useSyncExternalStore(subscribe, () => current, () => "dark" as Theme);
   // Initialise on the client without causing hydration mismatch.
   useEffect(() => {
     const stored = readStored();
