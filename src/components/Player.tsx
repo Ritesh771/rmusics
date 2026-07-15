@@ -164,7 +164,17 @@ export function Player() {
   // Seek
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
-      seekAudio(audioRef.current, _seekTarget);
+      const audio = audioRef.current;
+      const readyForSeek =
+        audio.readyState >= 1 &&
+        (!Number.isFinite(audio.duration) || audio.currentSrc);
+      if (readyForSeek) {
+        seekAudio(audio, _seekTarget);
+      } else {
+        // Audio hasn't hydrated for the current song yet — queue the seek
+        // so onLoadedMetadata applies it once the correct src is buffered.
+        pendingSeekRef.current = _seekTarget;
+      }
       clearSeek();
     }
   }, [_seekTarget, clearSeek, seekAudio]);
@@ -201,7 +211,20 @@ export function Player() {
       const audio = audioRef.current;
       if (!audio) return;
       const state = usePlayer.getState();
-      if (!state.queue[state.currentIndex]) return;
+      const currentSong = state.queue[state.currentIndex];
+      if (!currentSong) return;
+      // Reconciliation: if the audio element is playing a different song
+      // than what the store thinks is current, resync the src. This keeps
+      // UI seek/progress/queue in lock-step with the actual audio.
+      if (audio.dataset.songId !== currentSong.id) {
+        suppressPauseUntil.current = Date.now() + 1500;
+        audio.dataset.songId = currentSong.id;
+        audio.src = streamUrl(currentSong.audio_url);
+        pendingSeekRef.current = Math.max(0, state.progress || 0);
+        audio.load();
+        if (state.isPlaying) audio.play().catch(() => {});
+        return;
+      }
       // Sync progress from the audio element (rAF is paused in background)
       if (!scrubbing && Math.abs(state.progress - audio.currentTime) > 0.5) {
         setProgress(audio.currentTime);
@@ -339,12 +362,17 @@ export function Player() {
         onLoadedMetadata={(e) => {
           const audio = e.currentTarget;
           const loadedSong = usePlayer.getState().currentSong();
+          // Guard: only apply hydrated state if this metadata belongs to the
+          // song the store currently expects. Prevents seek/duration values
+          // from bleeding across a fast track swap.
+          if (loadedSong && audio.dataset.songId !== loadedSong.id) return;
           const realDuration = Number.isFinite(audio.duration) ? audio.duration : (loadedSong?.duration ?? 0);
           setDuration(realDuration);
           const pending = pendingSeekRef.current;
           if (pending != null) {
             pendingSeekRef.current = null;
             seekAudio(audio, Math.min(pending, realDuration || pending));
+            setProgress(Math.min(pending, realDuration || pending));
           }
         }}
         onPlay={() => { suppressPauseUntil.current = 0; usePlayer.setState({ isPlaying: true }); }}

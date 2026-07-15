@@ -88,9 +88,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "R Musics — Free Music Streaming" },
       { property: "og:description", content: "Stream music, build playlists and enjoy a beautiful player. Free on any device." },
       { property: "og:type", content: "website" },
+      // Dual theme-color so the PWA / iOS status bar / Android chrome match
+      // the user's system (or in-app) theme. The theme-store also swaps the
+      // no-media fallback live when the user toggles theme inside the app.
       { name: "theme-color", content: "#000000" },
+      { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#ffffff" },
+      { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#000000" },
+      { name: "color-scheme", content: "light dark" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-title", content: "R Musics" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },

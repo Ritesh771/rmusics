@@ -18,8 +18,13 @@ function apply(theme: Theme) {
   const root = document.documentElement;
   root.classList.toggle("dark", theme === "dark");
   root.style.colorScheme = theme;
-  const meta = document.querySelector('meta[name="theme-color"]');
+  // Update the un-scoped theme-color (used when the browser ignores
+  // media-scoped variants, e.g. inside an installed PWA where the user's
+  // choice inside the app should win over system prefs).
+  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
   if (meta) meta.setAttribute("content", theme === "dark" ? "#000000" : "#ffffff");
+  const apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (apple) apple.setAttribute("content", theme === "dark" ? "black-translucent" : "default");
 }
 
 export function setTheme(theme: Theme) {
