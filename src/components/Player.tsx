@@ -362,12 +362,17 @@ export function Player() {
         onLoadedMetadata={(e) => {
           const audio = e.currentTarget;
           const loadedSong = usePlayer.getState().currentSong();
+          // Guard: only apply hydrated state if this metadata belongs to the
+          // song the store currently expects. Prevents seek/duration values
+          // from bleeding across a fast track swap.
+          if (loadedSong && audio.dataset.songId !== loadedSong.id) return;
           const realDuration = Number.isFinite(audio.duration) ? audio.duration : (loadedSong?.duration ?? 0);
           setDuration(realDuration);
           const pending = pendingSeekRef.current;
           if (pending != null) {
             pendingSeekRef.current = null;
             seekAudio(audio, Math.min(pending, realDuration || pending));
+            setProgress(Math.min(pending, realDuration || pending));
           }
         }}
         onPlay={() => { suppressPauseUntil.current = 0; usePlayer.setState({ isPlaying: true }); }}
