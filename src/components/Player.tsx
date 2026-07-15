@@ -164,7 +164,17 @@ export function Player() {
   // Seek
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
-      seekAudio(audioRef.current, _seekTarget);
+      const audio = audioRef.current;
+      const readyForSeek =
+        audio.readyState >= 1 &&
+        (!Number.isFinite(audio.duration) || audio.currentSrc);
+      if (readyForSeek) {
+        seekAudio(audio, _seekTarget);
+      } else {
+        // Audio hasn't hydrated for the current song yet — queue the seek
+        // so onLoadedMetadata applies it once the correct src is buffered.
+        pendingSeekRef.current = _seekTarget;
+      }
       clearSeek();
     }
   }, [_seekTarget, clearSeek, seekAudio]);
