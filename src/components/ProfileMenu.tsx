@@ -4,7 +4,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Library, Clock, Sparkles } from "lucide-react";
+import { LogOut, Library, Clock, Sparkles, Sun, Moon } from "lucide-react";
 import { useAuth, getDisplayName, getAvatarUrl } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "@tanstack/react-router";
@@ -12,12 +12,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMood } from "@/lib/mood-store";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useTheme, toggleTheme } from "@/lib/theme-store";
 
 export function ProfileMenu() {
   const { user } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
   const { enabled: moodOn, toggle: toggleMood } = useMood();
+  const theme = useTheme();
+  const isDark = theme === "dark";
   if (!user) return null;
   const name = getDisplayName(user);
   const avatar = getAvatarUrl(user);
@@ -54,6 +57,18 @@ export function ProfileMenu() {
             Mood lights
           </span>
           <Switch checked={moodOn} onCheckedChange={() => toggleMood()} onClick={(e) => e.stopPropagation()} />
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={(e) => { e.preventDefault(); toggleTheme(); }}
+          className="flex items-center justify-between gap-3"
+        >
+          <span className="flex items-center">
+            {isDark
+              ? <Moon className="h-4 w-4 mr-2 text-primary transition-colors" />
+              : <Sun className="h-4 w-4 mr-2 text-primary transition-colors" />}
+            {isDark ? "Dark mode" : "Light mode"}
+          </span>
+          <Switch checked={isDark} onCheckedChange={() => toggleTheme()} onClick={(e) => e.stopPropagation()} />
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

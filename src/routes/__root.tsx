@@ -15,6 +15,7 @@ import { QueuePanel } from "@/components/QueuePanel";
 import { Toaster } from "@/components/ui/sonner";
 import { usePersistentQueue } from "@/lib/use-persistent-queue";
 import { useAuth } from "@/lib/auth-hook";
+import { useTheme } from "@/lib/theme-store";
 
 function NotFoundComponent() {
   return (
@@ -144,11 +145,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('rmusics.theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}var r=document.documentElement;r.classList.toggle('dark',t==='dark');r.style.colorScheme=t;}catch(e){}})();`,
+          }}
+        />
       </head>
-      <body className="bg-background text-foreground">
+      <body className="bg-background text-foreground" suppressHydrationWarning>
         {children}
         <Scripts />
       </body>
@@ -169,13 +175,14 @@ function RootComponent() {
 function RootInner() {
   const { user } = useAuth();
   usePersistentQueue(user?.id ?? null);
+  const theme = useTheme();
   return (
     <>
       <Outlet />
       <Player />
       <NowPlaying />
       <QueuePanel />
-      <Toaster theme="dark" />
+      <Toaster theme={theme} />
     </>
   );
 }

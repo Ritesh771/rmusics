@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/owner";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
+import { streamUrl } from "@/lib/stream-url";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -91,7 +92,7 @@ export function Player() {
       if (audio.dataset.songId !== targetSong.id) {
         suppressPauseUntil.current = Date.now() + 1500;
         audio.dataset.songId = targetSong.id;
-        audio.src = targetSong.audio_url;
+        audio.src = streamUrl(targetSong.audio_url);
         audio.load();
       }
       pendingSeekRef.current = null;
@@ -145,7 +146,7 @@ export function Player() {
     if (audio.dataset.songId !== song.id) {
       if (isPlaying) suppressPauseUntil.current = Date.now() + 1500;
       audio.dataset.songId = song.id;
-      audio.src = song.audio_url;
+      audio.src = streamUrl(song.audio_url);
       const resumeAt = Math.max(0, usePlayer.getState().progress || 0);
       pendingSeekRef.current = resumeAt;
       audio.load();
