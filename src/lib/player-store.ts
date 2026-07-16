@@ -141,22 +141,26 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   next: () => {
     const { queue, currentIndex, repeat, shuffle } = get();
     if (!queue.length) return null;
+    // Manual/natural next always advances one track; repeat-one is handled
+    // by the audio onEnded path (repeat-one only re-plays on natural end,
+    // Spotify skips normally on a manual Next press).
     if (currentIndex + 1 >= queue.length) {
       if (repeat === "all") {
-        // Spotify-style: reshuffle the queue when looping with shuffle on
         if (shuffle && queue.length > 1) {
-          const reshuffled = shuffleArr(queue, queue.length - 1);
-          const nextIndex = Math.min(1, reshuffled.length - 1);
-          set({ queue: reshuffled, currentIndex: nextIndex, isPlaying: true, progress: 0, duration: reshuffled[nextIndex]?.duration ?? 0 });
-          void recordPlay(reshuffled[nextIndex]);
-          return reshuffled[nextIndex] ?? null;
+          // Spotify smart-shuffle: reshuffle the whole queue and start fresh
+          // at index 0 so the loop feels like a brand new randomized set.
+          const reshuffled = shuffleArr(queue, 0);
+          set({ queue: reshuffled, currentIndex: 0, isPlaying: true, progress: 0, duration: reshuffled[0]?.duration ?? 0 });
+          void recordPlay(reshuffled[0]);
+          return reshuffled[0] ?? null;
         } else {
           set({ currentIndex: 0, isPlaying: true, progress: 0, duration: queue[0]?.duration ?? 0 });
           void recordPlay(queue[0]);
           return queue[0] ?? null;
         }
       } else {
-        set({ isPlaying: false });
+        // End of queue, no repeat — Spotify stops but keeps the last track "current".
+        set({ isPlaying: false, progress: 0 });
         return null;
       }
     }
@@ -166,13 +170,21 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     return queue[nextIndex] ?? null;
   },
   prev: () => {
-    const { queue, currentIndex, progress } = get();
+    const { queue, currentIndex, progress, repeat } = get();
     if (!queue.length || currentIndex < 0) return null;
+    // Spotify: > 3s into a track, Prev restarts the current track.
     if (progress > 3) {
       set({ _seekTarget: 0, progress: 0 });
       return queue[currentIndex] ?? null;
     }
     if (currentIndex <= 0) {
+      // Wrap to the last track when repeat=all, otherwise restart the first.
+      if (repeat === "all" && queue.length > 1) {
+        const last = queue.length - 1;
+        set({ currentIndex: last, isPlaying: true, progress: 0, duration: queue[last]?.duration ?? 0 });
+        void recordPlay(queue[last]);
+        return queue[last] ?? null;
+      }
       set({ _seekTarget: 0, progress: 0 });
       return queue[0] ?? null;
     }
