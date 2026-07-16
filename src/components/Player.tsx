@@ -391,20 +391,29 @@ export function Player() {
           if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {});
         }}
         onError={() => {
-          // Transient stream failure: try to reload the same track once, then
-          // skip forward so background playback never gets permanently stuck.
           const audio = audioRef.current;
           if (!audio) return;
+          const state = usePlayer.getState();
+          // Repeat-one: try harder before giving up so a hiccup doesn't skip
+          // the song the user explicitly asked to loop.
+          const maxRetries = state.repeat === "one" ? 3 : 1;
           errorRetryRef.current += 1;
-          if (errorRetryRef.current <= 1) {
+          if (errorRetryRef.current <= maxRetries) {
             suppressPauseUntil.current = Date.now() + 5000;
-            const at = usePlayer.getState().progress || 0;
+            const at = state.progress || 0;
             pendingSeekRef.current = at;
             audio.load();
             audio.play().catch(() => {});
           } else {
             errorRetryRef.current = 0;
-            advanceToNext();
+            // On repeat-one, restart from 0 instead of skipping.
+            if (state.repeat === "one") {
+              pendingSeekRef.current = 0;
+              audio.load();
+              audio.play().catch(() => {});
+            } else {
+              advanceToNext();
+            }
           }
         }}
         onTimeUpdate={() => publishAudioTime(true)}
