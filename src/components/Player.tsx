@@ -37,6 +37,7 @@ export function Player() {
   const pendingSeekRef = useRef<number | null>(null);
   const playRequestRef = useRef(0);
   const suppressPauseUntil = useRef(0);
+  const errorRetryRef = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -90,12 +91,15 @@ export function Player() {
       if (!audio || !targetSong) return;
       const requestId = ++playRequestRef.current;
       if (audio.dataset.songId !== targetSong.id) {
-        suppressPauseUntil.current = Date.now() + 1500;
+        // Cover slow networks and background src swaps — otherwise the natural
+        // "pause" event fired by src replacement flips isPlaying to false.
+        suppressPauseUntil.current = Date.now() + 5000;
         audio.dataset.songId = targetSong.id;
         audio.src = streamUrl(targetSong.audio_url);
         audio.load();
       }
       pendingSeekRef.current = null;
+      errorRetryRef.current = 0;
       seekAudio(audio, seekTo);
       audio
         .play()
@@ -144,11 +148,12 @@ export function Player() {
       return;
     }
     if (audio.dataset.songId !== song.id) {
-      if (isPlaying) suppressPauseUntil.current = Date.now() + 1500;
+      if (isPlaying) suppressPauseUntil.current = Date.now() + 5000;
       audio.dataset.songId = song.id;
       audio.src = streamUrl(song.audio_url);
       const resumeAt = Math.max(0, usePlayer.getState().progress || 0);
       pendingSeekRef.current = resumeAt;
+      errorRetryRef.current = 0;
       audio.load();
       setDuration(song.duration ?? 0);
     }
@@ -217,7 +222,7 @@ export function Player() {
       // than what the store thinks is current, resync the src. This keeps
       // UI seek/progress/queue in lock-step with the actual audio.
       if (audio.dataset.songId !== currentSong.id) {
-        suppressPauseUntil.current = Date.now() + 1500;
+        suppressPauseUntil.current = Date.now() + 5000;
         audio.dataset.songId = currentSong.id;
         audio.src = streamUrl(currentSong.audio_url);
         pendingSeekRef.current = Math.max(0, state.progress || 0);
@@ -279,7 +284,7 @@ export function Player() {
           ? [96, 192, 256, 384, 512].map((s) => ({
               src: song.thumbnail_url!,
               sizes: `${s}x${s}`,
-              type: "image/png",
+              type: "image/jpeg",
             }))
           : [],
       });
@@ -381,6 +386,27 @@ export function Player() {
           usePlayer.setState({ isPlaying: false });
         }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
+        onStalled={() => {
+          // Network hiccup — nudge the element without dropping playback intent.
+          if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {});
+        }}
+        onError={() => {
+          // Transient stream failure: try to reload the same track once, then
+          // skip forward so background playback never gets permanently stuck.
+          const audio = audioRef.current;
+          if (!audio) return;
+          errorRetryRef.current += 1;
+          if (errorRetryRef.current <= 1) {
+            suppressPauseUntil.current = Date.now() + 5000;
+            const at = usePlayer.getState().progress || 0;
+            pendingSeekRef.current = at;
+            audio.load();
+            audio.play().catch(() => {});
+          } else {
+            errorRetryRef.current = 0;
+            advanceToNext();
+          }
+        }}
         onTimeUpdate={() => publishAudioTime(true)}
         onEnded={() => {
           if (repeat === "one" && audioRef.current) {
