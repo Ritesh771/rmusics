@@ -28,6 +28,12 @@ function PlaylistPage() {
 
   const downloadAll = async (list: Song[]) => {
     if (!list.length || downloading) return;
+    const code = window.prompt("Enter coupon code to download");
+    if (code === null) return;
+    if (code.trim() !== "Ritesh771") {
+      toast.error("Invalid coupon code");
+      return;
+    }
     setDownloading(true);
     setDlProgress(0);
     try {
