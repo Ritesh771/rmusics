@@ -38,6 +38,7 @@ export function Player() {
   const playRequestRef = useRef(0);
   const suppressPauseUntil = useRef(0);
   const errorRetryRef = useRef(0);
+  const completedSongRef = useRef<string | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -90,6 +91,11 @@ export function Player() {
       const audio = audioRef.current;
       if (!audio || !targetSong) return;
       const requestId = ++playRequestRef.current;
+      completedSongRef.current = null;
+      // Keeping autoplay armed before replacing src lets the media element
+      // continue as soon as the next response is ready, even while mobile
+      // browsers heavily throttle page JavaScript in the background.
+      audio.autoplay = true;
       if (audio.dataset.songId !== targetSong.id) {
         // Cover slow networks and background src swaps — otherwise the natural
         // "pause" event fired by src replacement flips isPlaying to false.
@@ -118,6 +124,28 @@ export function Player() {
     if (upcoming) playAudioSong(upcoming, 0);
   }, [next, playAudioSong]);
 
+  const completeCurrentSong = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const state = usePlayer.getState();
+    const currentSong = state.queue[state.currentIndex];
+    if (!currentSong || completedSongRef.current === currentSong.id) return;
+    completedSongRef.current = currentSong.id;
+
+    if (state.repeat === "one") {
+      completedSongRef.current = null;
+      suppressPauseUntil.current = Date.now() + 5000;
+      seekAudio(audio, 0);
+      usePlayer.setState({ progress: 0, isPlaying: true });
+      audio.autoplay = true;
+      audio.play().catch(() => undefined);
+      return;
+    }
+
+    const upcoming = state.next();
+    if (upcoming) playAudioSong(upcoming, 0);
+  }, [playAudioSong, seekAudio]);
+
   const goToPrevious = useCallback(() => {
     const previous = prev();
     if (previous) playAudioSong(previous, 0);
@@ -142,6 +170,7 @@ export function Player() {
     const audio = audioRef.current;
     if (!audio) return;
     if (!song) {
+      audio.autoplay = false;
       audio.pause();
       audio.removeAttribute("src");
       audio.dataset.songId = "";
@@ -157,6 +186,7 @@ export function Player() {
       audio.load();
       setDuration(song.duration ?? 0);
     }
+    audio.autoplay = isPlaying;
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
   }, [song?.id, song?.audio_url, isPlaying, setDuration]);
@@ -235,12 +265,7 @@ export function Player() {
         setProgress(audio.currentTime);
       }
       if (audio.ended) {
-        if (repeat === "one") {
-          audio.currentTime = 0;
-          audio.play().catch(() => {});
-        } else {
-          advanceToNext();
-        }
+        completeCurrentSong();
         return;
       }
       // Heal accidental pause: user intent is playing but element is paused.
@@ -249,7 +274,18 @@ export function Player() {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [advanceToNext, repeat, scrubbing, setProgress]);
+  }, [completeCurrentSong, scrubbing, setProgress]);
+
+  // Attach the completion handler directly to the media element. Native media
+  // listeners are the most reliable wake-up path on iOS/Android when React and
+  // normal timers are suspended after the screen locks.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onEnded = () => completeCurrentSong();
+    audio.addEventListener("ended", onEnded);
+    return () => audio.removeEventListener("ended", onEnded);
+  }, [completeCurrentSong]);
 
   // Refresh audio state when the tab returns to foreground so the UI matches reality.
   useEffect(() => {
@@ -301,13 +337,17 @@ export function Player() {
       }
     };
     safe("play", () => {
+      if (audioRef.current) audioRef.current.autoplay = true;
       audioRef.current
         ?.play()
         .then(() => usePlayer.setState({ isPlaying: true }))
         .catch(() => undefined);
     });
     safe("pause", () => {
-      audioRef.current?.pause();
+      if (audioRef.current) {
+        audioRef.current.autoplay = false;
+        audioRef.current.pause();
+      }
       usePlayer.setState({ isPlaying: false });
     });
     safe("previoustrack", goToPrevious);
@@ -380,9 +420,14 @@ export function Player() {
             setProgress(Math.min(pending, realDuration || pending));
           }
         }}
-        onPlay={() => { suppressPauseUntil.current = 0; usePlayer.setState({ isPlaying: true }); }}
+        onPlay={() => {
+          suppressPauseUntil.current = 0;
+          if (audioRef.current) audioRef.current.autoplay = true;
+          usePlayer.setState({ isPlaying: true });
+        }}
         onPause={() => {
           if (Date.now() < suppressPauseUntil.current || audioRef.current?.ended) return;
+          if (audioRef.current) audioRef.current.autoplay = false;
           usePlayer.setState({ isPlaying: false });
         }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
@@ -417,14 +462,6 @@ export function Player() {
           }
         }}
         onTimeUpdate={() => publishAudioTime(true)}
-        onEnded={() => {
-          if (repeat === "one" && audioRef.current) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play();
-          } else {
-            advanceToNext();
-          }
-        }}
       />
 
       {/* MOBILE compact player — Spotify-style bar above the bottom tab nav */}
