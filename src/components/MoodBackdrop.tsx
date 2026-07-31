@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import { usePlayer } from "@/lib/player-store";
 import { useMood } from "@/lib/mood-store";
+import { streamUrl } from "@/lib/stream-url";
 
 // Tiny palette-cache so we don't re-sample the same artwork
 const paletteCache = new Map<string, string[]>();
 
 async function extractPalette(url: string): Promise<string[] | null> {
-  if (paletteCache.has(url)) return paletteCache.get(url)!;
+  const cachedPalette = paletteCache.get(url);
+  if (cachedPalette) return cachedPalette;
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -55,10 +57,14 @@ export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
   const lastUrl = useRef<string | null>(null);
 
   useEffect(() => {
-    const url = song?.thumbnail_url;
-    if (!url || url === lastUrl.current) return;
-    lastUrl.current = url;
-    extractPalette(url).then((p) => { if (p && p.length) setPalette(p); });
+    const artworkUrl = song?.thumbnail_url;
+    if (!artworkUrl || artworkUrl === lastUrl.current) return;
+    lastUrl.current = artworkUrl;
+    // Load artwork through the same-origin R2 proxy. This keeps the canvas
+    // readable even when the bucket itself does not expose image CORS headers.
+    extractPalette(streamUrl(artworkUrl)).then((p) => {
+      if (p && p.length && lastUrl.current === artworkUrl) setPalette(p);
+    });
   }, [song?.thumbnail_url, setPalette]);
 
   if (!enabled) return null;
