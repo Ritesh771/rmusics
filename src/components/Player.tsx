@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { streamUrl } from "@/lib/stream-url";
 import { useShakeVolume } from "@/lib/use-shake-volume";
+import { seekCommitHaptic, seekDragHaptic, seekTouchHaptic } from "@/lib/haptics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -116,7 +117,7 @@ export function Player() {
       if (audio.dataset.songId !== targetSong.id) {
         // Cover slow networks and background src swaps — otherwise the natural
         // "pause" event fired by src replacement flips isPlaying to false.
-        suppressPauseUntil.current = Date.now() + 5000;
+        suppressPauseUntil.current = Date.now() + 15000;
         audio.dataset.songId = targetSong.id;
         audio.src = streamUrl(targetSong.audio_url);
         audio.load();
@@ -131,7 +132,11 @@ export function Player() {
             usePlayer.setState({ isPlaying: true });
           }
         })
-        .catch(() => undefined);
+        .catch(() => {
+          // Keep autoplay armed. Mobile browsers can defer this request while
+          // locked and then honor it when the new source becomes playable.
+          audio.autoplay = true;
+        });
     },
     [seekAudio],
   );
@@ -160,7 +165,10 @@ export function Player() {
     }
 
     const upcoming = state.next();
-    if (upcoming) playAudioSong(upcoming, 0);
+    if (upcoming) {
+      try { navigator.mediaSession.playbackState = "playing"; } catch {}
+      playAudioSong(upcoming, 0);
+    }
   }, [playAudioSong, seekAudio]);
 
   const goToPrevious = useCallback(() => {
@@ -319,7 +327,7 @@ export function Player() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onEnded = () => completeCurrentSong();
+      const onEnded = () => completeCurrentSong();
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
   }, [completeCurrentSong]);
@@ -486,7 +494,15 @@ export function Player() {
           usePlayer.setState({ isPlaying: true });
         }}
         onPause={() => {
-          if (Date.now() < suppressPauseUntil.current || audioRef.current?.ended) return;
+          const audio = audioRef.current;
+          // Safari can deliver the terminal pause while delaying/suppressing
+          // `ended` after screen lock. Treat a pause at the media boundary as
+          // native completion so the next source is installed immediately.
+          if (audio?.ended || (audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.1)) {
+            completeCurrentSong();
+            return;
+          }
+          if (Date.now() < suppressPauseUntil.current) return;
           if (audioRef.current) audioRef.current.autoplay = false;
           usePlayer.setState({ isPlaying: false });
         }}
@@ -642,8 +658,9 @@ export function Player() {
             value={[scrubbing ? scrubValue : progress]}
             max={duration || 1}
             step={0.01}
-            onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); }}
-            onValueCommit={(v) => { commitSeek(v[0]); scrubbingRef.current = false; setScrubbing(false); }}
+            onPointerDown={seekTouchHaptic}
+            onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
+            onValueCommit={(v) => { commitSeek(v[0]); seekCommitHaptic(); scrubbingRef.current = false; setScrubbing(false); }}
             onPointerCancel={() => { scrubbingRef.current = false; setScrubbing(false); }}
             className="flex-1 group"
           />

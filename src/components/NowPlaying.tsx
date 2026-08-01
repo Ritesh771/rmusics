@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef, type TouchEvent } from "react";
 import { cn } from "@/lib/utils";
 import { MoodBackdrop } from "./MoodBackdrop";
+import { seekCommitHaptic, seekDragHaptic, seekTouchHaptic } from "@/lib/haptics";
 
 export function NowPlaying() {
   const nowPlayingOpen = usePlayer((s) => s.nowPlayingOpen);
@@ -206,8 +207,9 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
                 value={[scrubbing ? scrubValue : progress]}
                 max={duration || 1}
                 step={0.01}
-                onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); }}
-                onValueCommit={(v) => { seek(v[0]); setScrubbing(false); }}
+                onPointerDown={seekTouchHaptic}
+                onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
+                onValueCommit={(v) => { seek(v[0]); seekCommitHaptic(); setScrubbing(false); }}
               />
               <div className="flex justify-between text-xs text-white/60 tabular-nums">
                 <span>{formatDuration(scrubbing ? scrubValue : progress)}</span>
