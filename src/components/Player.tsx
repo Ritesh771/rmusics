@@ -519,6 +519,13 @@ export function Player() {
           }
         }}
         onTimeUpdate={() => publishAudioTime(true)}
+        onSeeked={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          seekHoldRef.current = null;
+          if (!scrubbingRef.current) setProgress(audio.currentTime);
+          if (usePlayer.getState().isPlaying && audio.paused) audio.play().catch(() => {});
+        }}
       />
 
       {/* MOBILE compact player — Spotify-style bar above the bottom tab nav */}
@@ -632,9 +639,10 @@ export function Player() {
             value={[scrubbing ? scrubValue : progress]}
             max={duration || 1}
             step={0.01}
-            onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); }}
-            onValueCommit={(v) => { seek(v[0]); setScrubbing(false); }}
-            className="flex-1"
+            onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); }}
+            onValueCommit={(v) => { commitSeek(v[0]); scrubbingRef.current = false; setScrubbing(false); }}
+            onPointerCancel={() => { scrubbingRef.current = false; setScrubbing(false); }}
+            className="flex-1 group"
           />
           <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatDuration(duration)}</span>
         </div>
