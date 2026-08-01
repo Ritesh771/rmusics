@@ -287,10 +287,18 @@ export function Player() {
         return;
       }
       // Sync progress from the audio element (rAF is paused in background)
-      if (!scrubbing && Math.abs(state.progress - audio.currentTime) > 0.5) {
+      if (!scrubbingRef.current && !seekHoldRef.current && Math.abs(state.progress - audio.currentTime) > 0.5) {
         setProgress(audio.currentTime);
       }
       if (audio.ended) {
+        completeCurrentSong();
+        return;
+      }
+      // Timing safety net: some browsers stop firing `ended` in background and
+      // just park the element at the very end. Treat that as completion so the
+      // next track starts on time instead of stalling silently.
+      const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+      if (dur > 0 && audio.currentTime >= dur - 0.35 && audio.paused && state.isPlaying) {
         completeCurrentSong();
         return;
       }
@@ -300,7 +308,7 @@ export function Player() {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [completeCurrentSong, scrubbing, setProgress]);
+  }, [completeCurrentSong, setProgress]);
 
   // Attach the completion handler directly to the media element. Native media
   // listeners are the most reliable wake-up path on iOS/Android when React and
@@ -343,11 +351,14 @@ export function Player() {
         artist: song.artist,
         album: song.album ?? "",
         artwork: song.thumbnail_url
-          ? [96, 192, 256, 384, 512].map((s) => ({
-              src: song.thumbnail_url!,
-              sizes: `${s}x${s}`,
-              type: "image/jpeg",
-            }))
+          ? [96, 128, 192, 256, 384, 512].flatMap((s) =>
+              ["image/jpeg", "image/png"].map((type) => ({
+                // Same-origin proxy so iOS/Android can actually fetch the art.
+                src: streamUrl(song.thumbnail_url),
+                sizes: `${s}x${s}`,
+                type,
+              })),
+            )
           : [],
       });
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
@@ -379,14 +390,34 @@ export function Player() {
     safe("previoustrack", goToPrevious);
     safe("nexttrack", advanceToNext);
     safe("seekto", (e) => {
-      if (typeof e.seekTime === "number") seek(e.seekTime);
+      if (typeof e.seekTime !== "number") return;
+      const audio = audioRef.current;
+      if (e.fastSeek && audio && typeof (audio as FastSeekAudio).fastSeek === "function") {
+        (audio as FastSeekAudio).fastSeek!(e.seekTime);
+        setProgress(e.seekTime);
+        return;
+      }
+      commitSeek(e.seekTime);
+    });
+    safe("seekbackward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress - by);
+    });
+    safe("seekforward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress + by);
+    });
+    safe("stop", () => {
+      audioRef.current?.pause();
+      usePlayer.setState({ isPlaying: false });
     });
     return () => {
-      ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
-        safe(a as MediaSessionAction, null),
-      );
+      [
+        "play", "pause", "previoustrack", "nexttrack",
+        "seekto", "seekbackward", "seekforward", "stop",
+      ].forEach((a) => safe(a as MediaSessionAction, null));
     };
-  }, [song?.id, isPlaying, advanceToNext, goToPrevious, seek]);
+  }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url, isPlaying, advanceToNext, goToPrevious, commitSeek, setProgress]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -395,7 +426,7 @@ export function Player() {
     try {
       navigator.mediaSession.setPositionState?.({
         duration,
-        position: Math.min(progress, duration),
+        position: Math.max(0, Math.min(audioRef.current?.currentTime ?? progress, duration)),
         playbackRate: audioRef.current?.playbackRate ?? 1,
       });
     } catch {}
