@@ -20,6 +20,7 @@ import { formatDuration } from "@/lib/owner";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { streamUrl } from "@/lib/stream-url";
+import { useShakeVolume } from "@/lib/use-shake-volume";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -39,6 +40,8 @@ export function Player() {
   const suppressPauseUntil = useRef(0);
   const errorRetryRef = useRef(0);
   const completedSongRef = useRef<string | null>(null);
+  const scrubbingRef = useRef(false);
+  const seekHoldRef = useRef<{ target: number; until: number } | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -67,6 +70,20 @@ export function Player() {
   const toggleQueuePanel = usePlayer((s) => s.toggleQueuePanel);
   const qc = useQueryClient();
   const { user } = useAuth();
+  useShakeVolume();
+
+  const commitSeek = useCallback(
+    (time: number) => {
+      const state = usePlayer.getState();
+      const max = state.duration || Number.POSITIVE_INFINITY;
+      const target = Math.max(0, Math.min(time, max));
+      // Hold the UI at the committed position briefly so the progress bar
+      // never snaps back to the pre-seek time while the media element seeks.
+      seekHoldRef.current = { target, until: performance.now() + 700 };
+      seek(target);
+    },
+    [seek],
+  );
 
   const seekAudio = useCallback((audio: HTMLAudioElement, time: number) => {
     const target = Math.max(0, Number.isFinite(time) ? time : 0);
@@ -153,7 +170,16 @@ export function Player() {
 
   const publishAudioTime = useCallback((force = false) => {
     const audio = audioRef.current;
-    if (!audio || scrubbing) return;
+    if (!audio || scrubbingRef.current) return;
+    const hold = seekHoldRef.current;
+    if (hold) {
+      // Release the hold as soon as the element actually lands near the target.
+      if (Math.abs(audio.currentTime - hold.target) < 0.5 || performance.now() > hold.until) {
+        seekHoldRef.current = null;
+      } else {
+        return;
+      }
+    }
     const now = performance.now();
     if (
       force ||
@@ -163,7 +189,7 @@ export function Player() {
       lastProgressPush.current = now;
       setProgress(audio.currentTime);
     }
-  }, [scrubbing, setProgress]);
+  }, [setProgress]);
 
   // Audio src/play control
   useEffect(() => {
