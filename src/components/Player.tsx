@@ -226,6 +226,9 @@ export function Player() {
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
       const audio = audioRef.current;
+      // Any seek source (UI bar, full-screen player, lock screen) gets the same
+      // hold window so the progress bar tracks the new position immediately.
+      seekHoldRef.current = { target: _seekTarget, until: performance.now() + 700 };
       const readyForSeek =
         audio.readyState >= 1 &&
         (!Number.isFinite(audio.duration) || audio.currentSrc);
