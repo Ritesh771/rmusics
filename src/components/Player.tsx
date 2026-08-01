@@ -20,6 +20,7 @@ import { formatDuration } from "@/lib/owner";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { streamUrl } from "@/lib/stream-url";
+import { useShakeVolume } from "@/lib/use-shake-volume";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -39,6 +40,8 @@ export function Player() {
   const suppressPauseUntil = useRef(0);
   const errorRetryRef = useRef(0);
   const completedSongRef = useRef<string | null>(null);
+  const scrubbingRef = useRef(false);
+  const seekHoldRef = useRef<{ target: number; until: number } | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -67,6 +70,20 @@ export function Player() {
   const toggleQueuePanel = usePlayer((s) => s.toggleQueuePanel);
   const qc = useQueryClient();
   const { user } = useAuth();
+  useShakeVolume();
+
+  const commitSeek = useCallback(
+    (time: number) => {
+      const state = usePlayer.getState();
+      const max = state.duration || Number.POSITIVE_INFINITY;
+      const target = Math.max(0, Math.min(time, max));
+      // Hold the UI at the committed position briefly so the progress bar
+      // never snaps back to the pre-seek time while the media element seeks.
+      seekHoldRef.current = { target, until: performance.now() + 700 };
+      seek(target);
+    },
+    [seek],
+  );
 
   const seekAudio = useCallback((audio: HTMLAudioElement, time: number) => {
     const target = Math.max(0, Number.isFinite(time) ? time : 0);
@@ -153,7 +170,16 @@ export function Player() {
 
   const publishAudioTime = useCallback((force = false) => {
     const audio = audioRef.current;
-    if (!audio || scrubbing) return;
+    if (!audio || scrubbingRef.current) return;
+    const hold = seekHoldRef.current;
+    if (hold) {
+      // Release the hold as soon as the element actually lands near the target.
+      if (Math.abs(audio.currentTime - hold.target) < 0.5 || performance.now() > hold.until) {
+        seekHoldRef.current = null;
+      } else {
+        return;
+      }
+    }
     const now = performance.now();
     if (
       force ||
@@ -163,7 +189,7 @@ export function Player() {
       lastProgressPush.current = now;
       setProgress(audio.currentTime);
     }
-  }, [scrubbing, setProgress]);
+  }, [setProgress]);
 
   // Audio src/play control
   useEffect(() => {
@@ -200,6 +226,9 @@ export function Player() {
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
       const audio = audioRef.current;
+      // Any seek source (UI bar, full-screen player, lock screen) gets the same
+      // hold window so the progress bar tracks the new position immediately.
+      seekHoldRef.current = { target: _seekTarget, until: performance.now() + 700 };
       const readyForSeek =
         audio.readyState >= 1 &&
         (!Number.isFinite(audio.duration) || audio.currentSrc);
@@ -261,10 +290,18 @@ export function Player() {
         return;
       }
       // Sync progress from the audio element (rAF is paused in background)
-      if (!scrubbing && Math.abs(state.progress - audio.currentTime) > 0.5) {
+      if (!scrubbingRef.current && !seekHoldRef.current && Math.abs(state.progress - audio.currentTime) > 0.5) {
         setProgress(audio.currentTime);
       }
       if (audio.ended) {
+        completeCurrentSong();
+        return;
+      }
+      // Timing safety net: some browsers stop firing `ended` in background and
+      // just park the element at the very end. Treat that as completion so the
+      // next track starts on time instead of stalling silently.
+      const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+      if (dur > 0 && audio.currentTime >= dur - 0.35 && audio.paused && state.isPlaying) {
         completeCurrentSong();
         return;
       }
@@ -274,7 +311,7 @@ export function Player() {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [completeCurrentSong, scrubbing, setProgress]);
+  }, [completeCurrentSong, setProgress]);
 
   // Attach the completion handler directly to the media element. Native media
   // listeners are the most reliable wake-up path on iOS/Android when React and
@@ -317,11 +354,14 @@ export function Player() {
         artist: song.artist,
         album: song.album ?? "",
         artwork: song.thumbnail_url
-          ? [96, 192, 256, 384, 512].map((s) => ({
-              src: song.thumbnail_url!,
-              sizes: `${s}x${s}`,
-              type: "image/jpeg",
-            }))
+          ? [96, 128, 192, 256, 384, 512].flatMap((s) =>
+              ["image/jpeg", "image/png"].map((type) => ({
+                // Same-origin proxy so iOS/Android can actually fetch the art.
+                src: streamUrl(song.thumbnail_url),
+                sizes: `${s}x${s}`,
+                type,
+              })),
+            )
           : [],
       });
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
@@ -353,14 +393,34 @@ export function Player() {
     safe("previoustrack", goToPrevious);
     safe("nexttrack", advanceToNext);
     safe("seekto", (e) => {
-      if (typeof e.seekTime === "number") seek(e.seekTime);
+      if (typeof e.seekTime !== "number") return;
+      const audio = audioRef.current;
+      if (e.fastSeek && audio && typeof (audio as FastSeekAudio).fastSeek === "function") {
+        (audio as FastSeekAudio).fastSeek!(e.seekTime);
+        setProgress(e.seekTime);
+        return;
+      }
+      commitSeek(e.seekTime);
+    });
+    safe("seekbackward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress - by);
+    });
+    safe("seekforward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress + by);
+    });
+    safe("stop", () => {
+      audioRef.current?.pause();
+      usePlayer.setState({ isPlaying: false });
     });
     return () => {
-      ["play", "pause", "previoustrack", "nexttrack", "seekto"].forEach((a) =>
-        safe(a as MediaSessionAction, null),
-      );
+      [
+        "play", "pause", "previoustrack", "nexttrack",
+        "seekto", "seekbackward", "seekforward", "stop",
+      ].forEach((a) => safe(a as MediaSessionAction, null));
     };
-  }, [song?.id, isPlaying, advanceToNext, goToPrevious, seek]);
+  }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url, isPlaying, advanceToNext, goToPrevious, commitSeek, setProgress]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -369,7 +429,7 @@ export function Player() {
     try {
       navigator.mediaSession.setPositionState?.({
         duration,
-        position: Math.min(progress, duration),
+        position: Math.max(0, Math.min(audioRef.current?.currentTime ?? progress, duration)),
         playbackRate: audioRef.current?.playbackRate ?? 1,
       });
     } catch {}
@@ -462,6 +522,13 @@ export function Player() {
           }
         }}
         onTimeUpdate={() => publishAudioTime(true)}
+        onSeeked={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          seekHoldRef.current = null;
+          if (!scrubbingRef.current) setProgress(audio.currentTime);
+          if (usePlayer.getState().isPlaying && audio.paused) audio.play().catch(() => {});
+        }}
       />
 
       {/* MOBILE compact player — Spotify-style bar above the bottom tab nav */}
@@ -575,9 +642,10 @@ export function Player() {
             value={[scrubbing ? scrubValue : progress]}
             max={duration || 1}
             step={0.01}
-            onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); }}
-            onValueCommit={(v) => { seek(v[0]); setScrubbing(false); }}
-            className="flex-1"
+            onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); }}
+            onValueCommit={(v) => { commitSeek(v[0]); scrubbingRef.current = false; setScrubbing(false); }}
+            onPointerCancel={() => { scrubbingRef.current = false; setScrubbing(false); }}
+            className="flex-1 group"
           />
           <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatDuration(duration)}</span>
         </div>
