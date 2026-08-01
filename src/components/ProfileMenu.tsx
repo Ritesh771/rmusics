@@ -4,7 +4,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Library, Clock, Sparkles, Sun, Moon } from "lucide-react";
+import { LogOut, Library, Clock, Sparkles, Sun, Moon, Smartphone } from "lucide-react";
 import { useAuth, getDisplayName, getAvatarUrl } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "@tanstack/react-router";
@@ -13,6 +13,7 @@ import { useMood } from "@/lib/mood-store";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useTheme, toggleTheme } from "@/lib/theme-store";
+import { useShake } from "@/lib/shake-store";
 
 export function ProfileMenu() {
   const { user } = useAuth();
@@ -21,6 +22,9 @@ export function ProfileMenu() {
   const { enabled: moodOn, toggle: toggleMood } = useMood();
   const theme = useTheme();
   const isDark = theme === "dark";
+  const shakeOn = useShake((s) => s.enabled);
+  const shakeSupported = useShake((s) => s.supported);
+  const toggleShake = useShake((s) => s.toggle);
   if (!user) return null;
   const name = getDisplayName(user);
   const avatar = getAvatarUrl(user);
@@ -70,6 +74,18 @@ export function ProfileMenu() {
           </span>
           <Switch checked={isDark} onCheckedChange={() => toggleTheme()} onClick={(e) => e.stopPropagation()} />
         </DropdownMenuItem>
+        {shakeSupported && (
+          <DropdownMenuItem
+            onSelect={(e) => { e.preventDefault(); void toggleShake(); }}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="flex items-center">
+              <Smartphone className={cn("h-4 w-4 mr-2 transition-colors", shakeOn ? "text-primary" : "text-muted-foreground")} />
+              Shake for volume
+            </span>
+            <Switch checked={shakeOn} onCheckedChange={() => void toggleShake()} onClick={(e) => e.stopPropagation()} />
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/library"><Library className="h-4 w-4 mr-2" />Library</Link>
