@@ -43,6 +43,9 @@ export function Player() {
   const completedSongRef = useRef<string | null>(null);
   const scrubbingRef = useRef(false);
   const seekHoldRef = useRef<{ target: number; until: number } | null>(null);
+  const prefetchRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedIdRef = useRef<string | null>(null);
+  const playRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
@@ -104,6 +107,26 @@ export function Player() {
     }
   }, []);
 
+  // Keep asking the media element to play for a few seconds after a source
+  // swap. Background/locked browsers often reject the first play() call and
+  // only honor a later one once the new stream is buffered — without this the
+  // queue silently stops after a couple of tracks.
+  const ensurePlaying = useCallback((attempt = 0) => {
+    if (playRetryRef.current) {
+      clearTimeout(playRetryRef.current);
+      playRetryRef.current = null;
+    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!usePlayer.getState().isPlaying) return;
+    audio.autoplay = true;
+    if (!audio.paused) return;
+    audio.play().catch(() => undefined);
+    if (attempt < 12) {
+      playRetryRef.current = setTimeout(() => ensurePlaying(attempt + 1), 500);
+    }
+  }, []);
+
   const playAudioSong = useCallback(
     (targetSong: Song | null, seekTo = 0) => {
       const audio = audioRef.current;
@@ -137,8 +160,10 @@ export function Player() {
           // locked and then honor it when the new source becomes playable.
           audio.autoplay = true;
         });
+      usePlayer.setState({ isPlaying: true });
+      ensurePlaying(0);
     },
-    [seekAudio],
+    [seekAudio, ensurePlaying],
   );
 
   const advanceToNext = useCallback(() => {
