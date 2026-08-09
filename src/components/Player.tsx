@@ -357,22 +357,74 @@ export function Player() {
     return () => audio.removeEventListener("ended", onEnded);
   }, [completeCurrentSong]);
 
-  // Refresh audio state when the tab returns to foreground so the UI matches reality.
+  // Buffer the upcoming track in a second, silent element so the transition
+  // works even when the browser wakes the page late (screen unlock / locked PWA).
+  useEffect(() => {
+    const upcomingIndex = usePlayer.getState().currentIndex + 1;
+    const upcoming = usePlayer.getState().queue[upcomingIndex];
+    if (!upcoming || prefetchedIdRef.current === upcoming.id) return;
+    prefetchedIdRef.current = upcoming.id;
+    let el = prefetchRef.current;
+    if (!el) {
+      el = document.createElement("audio");
+      el.preload = "auto";
+      el.muted = true;
+      el.volume = 0;
+      prefetchRef.current = el;
+    }
+    el.src = streamUrl(upcoming.audio_url);
+    try { el.load(); } catch {}
+  }, [song?.id]);
+
+  // Resume/continue playback when the screen unlocks or the app becomes visible
+  // again: reconcile the element with the store, restore the exact position and
+  // keep going instead of restarting or stalling.
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const onVis = () => {
+    const resync = () => {
       const audio = audioRef.current;
       if (!audio) return;
-      if (document.visibilityState === "visible") {
-        setProgress(audio.currentTime);
-        if (usePlayer.getState().isPlaying && audio.paused) {
-          audio.play().catch(() => {});
-        }
+      if (document.visibilityState !== "visible") return;
+      const state = usePlayer.getState();
+      const currentSong = state.queue[state.currentIndex];
+      if (!currentSong) return;
+      // The audio element drifted onto a different (or no) source while hidden.
+      if (audio.dataset.songId !== currentSong.id || !audio.currentSrc) {
+        suppressPauseUntil.current = Date.now() + 5000;
+        audio.dataset.songId = currentSong.id;
+        audio.src = streamUrl(currentSong.audio_url);
+        pendingSeekRef.current = Math.max(0, state.progress || 0);
+        audio.load();
+        if (state.isPlaying) ensurePlaying(0);
+        return;
       }
+      // Track finished while the screen was locked but nothing advanced.
+      const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+      if (audio.ended || (dur > 0 && audio.currentTime >= dur - 0.3 && audio.paused)) {
+        completeCurrentSong();
+        return;
+      }
+      if (!scrubbingRef.current && !seekHoldRef.current) setProgress(audio.currentTime);
+      if (state.isPlaying && audio.paused) ensurePlaying(0);
     };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [setProgress]);
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("focus", resync);
+    window.addEventListener("pageshow", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("focus", resync);
+      window.removeEventListener("pageshow", resync);
+    };
+  }, [setProgress, ensurePlaying, completeCurrentSong]);
+
+  useEffect(() => () => {
+    if (playRetryRef.current) clearTimeout(playRetryRef.current);
+    const el = prefetchRef.current;
+    if (el) {
+      el.removeAttribute("src");
+      try { el.load(); } catch {}
+    }
+  }, []);
 
   // MediaSession — lock-screen / notification controls + reliable background playback
   useEffect(() => {
