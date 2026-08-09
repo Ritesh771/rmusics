@@ -340,11 +340,11 @@ export function Player() {
       }
       // Heal accidental pause: user intent is playing but element is paused.
       if (state.isPlaying && audio.paused && Date.now() > suppressPauseUntil.current) {
-        audio.play().catch(() => {});
+        ensurePlaying(0);
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [completeCurrentSong, setProgress]);
+  }, [completeCurrentSong, setProgress, ensurePlaying]);
 
   // Attach the completion handler directly to the media element. Native media
   // listeners are the most reliable wake-up path on iOS/Android when React and
