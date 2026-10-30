@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
 import { Heart, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,7 @@ import { usePlayer, type Song } from "@/lib/player-store";
 import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/liked")({
-  head: () => ({ meta: [{ title: "Wavely — Liked" }] }),
+  head: () => ({ meta: [{ title: "Sonara — Liked Songs" }] }),
   component: LikedPage,
 });
 
@@ -29,7 +28,7 @@ function LikedPage() {
   });
 
   return (
-    <Layout>
+    <>
       <div className="bg-gradient-to-b from-purple-700 to-transparent p-6 pb-12">
         <div className="flex items-end gap-6">
           <div className="h-44 w-44 bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center rounded shadow-2xl">
@@ -58,6 +57,6 @@ function LikedPage() {
           {!songs.length && <div className="text-muted-foreground">No liked songs yet. Tap the heart on any track.</div>}
         </div>
       </div>
-    </Layout>
+    </>
   );
 }

@@ -69,6 +69,17 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/~oauth/initiate" || url.pathname.startsWith("/~oauth/")) {
+        const provider = url.searchParams.get("provider") || "google";
+        const redirectUri = url.searchParams.get("redirect_uri") || `${url.origin}/`;
+        const supabaseUrl = process.env.SUPABASE_URL || "https://zbatrdrpuvxqbbcpcfha.supabase.co";
+        return Response.redirect(
+          `${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectUri)}`,
+          302
+        );
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

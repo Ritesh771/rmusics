@@ -149,20 +149,20 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
 
   return (
     <div className={cn(
-      "now-playing-sheet fixed inset-0 z-[100] bg-gradient-to-b from-neutral-900 via-black to-black text-white flex flex-col overflow-hidden",
+      "now-playing-sheet fixed inset-0 z-[100] bg-gradient-to-b from-background/95 via-card/95 to-background text-foreground flex flex-col overflow-hidden backdrop-blur-2xl",
       closing ? "now-playing-sheet-out" : "now-playing-sheet-in",
     )}>
-      <MoodBackdrop intensity={1.2} />
+      <MoodBackdrop intensity={0.9} />
       {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-3 shrink-0">
-        <Button size="icon" variant="ghost" className="text-white hover:bg-white/10" onClick={closeNowPlaying}>
+      <div className="relative z-10 flex items-center justify-between px-4 py-3 shrink-0 border-b border-border/40 bg-background/40 backdrop-blur-md">
+        <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full" onClick={closeNowPlaying}>
           <ChevronDown className="h-6 w-6" />
         </Button>
         <div className="text-center min-w-0 px-2">
-          <div className="text-[10px] uppercase tracking-widest opacity-70">Now Playing</div>
-          <div className="text-sm font-semibold truncate">{song.album || song.artist}</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Now Playing</div>
+          <div className="text-sm font-bold truncate text-foreground">{song.album || song.artist}</div>
         </div>
-        <Button size="icon" variant="ghost" className="text-white hover:bg-white/10" onClick={() => setShowQueue((s) => !s)}>
+        <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full" onClick={() => setShowQueue((s) => !s)}>
           {showQueue ? <MoreHorizontal className="h-6 w-6" /> : <ListMusic className="h-6 w-6" />}
         </Button>
       </div>
@@ -176,7 +176,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
             style={{ willChange: "transform" }}
-            className="w-full max-w-md aspect-square rounded-lg overflow-hidden bg-neutral-700 shadow-2xl flex items-center justify-center touch-pan-y select-none"
+            className="w-full max-w-md aspect-square rounded-2xl overflow-hidden bg-muted/60 shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-border/60 flex items-center justify-center touch-pan-y select-none transition-shadow group"
           >
             {song.thumbnail_url ? (
               <img
@@ -184,25 +184,25 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
                 src={song.thumbnail_url}
                 alt=""
                 draggable={false}
-                className="h-full w-full object-cover animate-fade-in"
+                className="h-full w-full object-cover animate-fade-in group-hover:scale-105 transition-transform duration-700 ease-out"
               />
             ) : (
-              <Music className="h-24 w-24 text-white/30" />
+              <Music className="h-24 w-24 text-muted-foreground/40" />
             )}
           </div>
 
           <div className="w-full max-w-md mt-6 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-2xl font-bold truncate">{song.title}</div>
-                <div className="text-base text-white/70 truncate">{song.artist}</div>
+                <div className="text-2xl md:text-3xl font-extrabold tracking-tight truncate text-foreground">{song.title}</div>
+                <div className="text-base font-medium text-muted-foreground truncate mt-0.5">{song.artist}</div>
               </div>
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10 shrink-0" onClick={() => toggleLike.mutate()}>
-                <Heart className={isLiked ? "h-6 w-6 fill-primary text-primary" : "h-6 w-6"} />
+              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full shrink-0" onClick={() => toggleLike.mutate()}>
+                <Heart className={cn("h-6 w-6 transition-colors", isLiked ? "fill-primary text-primary" : "text-muted-foreground")} />
               </Button>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Slider
                 value={[scrubbing ? scrubValue : progress]}
                 max={duration || 1}
@@ -211,30 +211,30 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
                 onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
                 onValueCommit={(v) => { seek(v[0]); seekCommitHaptic(); setScrubbing(false); }}
               />
-              <div className="flex justify-between text-xs text-white/60 tabular-nums">
+              <div className="flex justify-between text-xs font-medium text-muted-foreground tabular-nums">
                 <span>{formatDuration(scrubbing ? scrubValue : progress)}</span>
                 <span>{formatDuration(duration)}</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10" onClick={toggleShuffle}>
+            <div className="flex items-center justify-between pt-1">
+              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full" onClick={toggleShuffle}>
                 <Shuffle className={shuffle ? "h-5 w-5 text-primary" : "h-5 w-5"} />
               </Button>
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10 h-12 w-12" onClick={prev}>
-                <SkipBack className="h-7 w-7 fill-white" />
+              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 h-12 w-12 rounded-full" onClick={prev}>
+                <SkipBack className="h-7 w-7 fill-current" />
               </Button>
               <Button
                 size="icon"
-                className="h-16 w-16 rounded-full bg-white text-black hover:bg-white/90 hover:scale-105 transition"
+                className="h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-transform"
                 onClick={togglePlay}
               >
-                {isPlaying ? <Pause className="h-7 w-7 fill-black" /> : <Play className="h-7 w-7 fill-black ml-1" />}
+                {isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 fill-current ml-1" />}
               </Button>
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10 h-12 w-12" onClick={next}>
-                <SkipForward className="h-7 w-7 fill-white" />
+              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 h-12 w-12 rounded-full" onClick={next}>
+                <SkipForward className="h-7 w-7 fill-current" />
               </Button>
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10" onClick={cycleRepeat}>
+              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full" onClick={cycleRepeat}>
                 {repeat === "one" ? (
                   <Repeat1 className="h-5 w-5 text-primary" />
                 ) : (
@@ -244,7 +244,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
             </div>
 
             <div className="hidden md:flex items-center gap-2 pt-2">
-              <Button size="icon" variant="ghost" className="text-white hover:bg-white/10 h-8 w-8" onClick={toggleMute}>
+              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 h-8 w-8 rounded-full" onClick={toggleMute}>
                 {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </Button>
               <Slider
@@ -260,24 +260,24 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
 
         {/* Queue panel */}
         {showQueue && (
-          <div className="md:w-96 md:border-l border-white/10 overflow-y-auto px-4 pb-6">
-            <h3 className="font-bold text-lg sticky top-0 bg-neutral-900/95 backdrop-blur py-3">Next up</h3>
-            <div className="space-y-1">
+          <div className="md:w-96 md:border-l border-border/60 overflow-y-auto px-4 pb-6 bg-card/60 backdrop-blur-xl">
+            <h3 className="font-bold text-lg sticky top-0 bg-card/95 backdrop-blur-md py-3.5 border-b border-border/50 text-foreground z-10">Next up</h3>
+            <div className="space-y-1.5 pt-2">
               {queue.map((s, i) => (
                 <button
                   key={s.id + i}
                   onClick={() => usePlayer.setState({ currentIndex: i, isPlaying: true, progress: 0, duration: s.duration ?? 0 })}
                   className={cn(
-                    "w-full flex items-center gap-3 p-2 rounded hover:bg-white/10 text-left",
-                    i === currentIndex && "bg-white/10"
+                    "w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/60 text-left transition-colors border border-transparent",
+                    i === currentIndex && "bg-primary/10 border-primary/20"
                   )}
                 >
-                  <div className="h-10 w-10 rounded bg-neutral-700 shrink-0 overflow-hidden">
+                  <div className="h-11 w-11 rounded-lg bg-muted shrink-0 overflow-hidden border border-border/40">
                     {s.thumbnail_url && <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className={cn("text-sm truncate", i === currentIndex && "text-primary font-medium")}>{s.title}</div>
-                    <div className="text-xs text-white/60 truncate">{s.artist}</div>
+                    <div className={cn("text-sm truncate text-foreground", i === currentIndex && "text-primary font-bold")}>{s.title}</div>
+                    <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
                   </div>
                 </button>
               ))}

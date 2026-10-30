@@ -628,9 +628,9 @@ export function Player() {
       {song && (
         <div
           onClick={openNowPlaying}
-          className="md:hidden fixed left-2 right-2 bottom-16 h-14 z-40 bg-neutral-800 rounded-md shadow-lg flex items-center gap-2 pl-2 pr-3 overflow-hidden"
+          className="md:hidden fixed left-2 right-2 bottom-18 h-14 z-40 bg-card/95 backdrop-blur-md border border-border/80 rounded-xl shadow-lg flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer"
         >
-          <div className="h-10 w-10 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-muted shrink-0 overflow-hidden flex items-center justify-center">
             {song.thumbnail_url ? (
               <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -638,144 +638,144 @@ export function Player() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium truncate text-white">{song.title}</div>
-            <div className="text-xs text-white/60 truncate">{song.artist}</div>
+            <div className="text-sm font-semibold truncate text-foreground">{song.title}</div>
+            <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
           </div>
           <Button
-            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
             onClick={(e) => { e.stopPropagation(); toggleQueuePanel(); }}
             aria-label="Queue"
           >
             <ListMusic className="h-5 w-5" />
           </Button>
           <Button
-            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
             onClick={(e) => { e.stopPropagation(); toggleLike.mutate(); }}
           >
             <Heart className={isLiked ? "h-5 w-5 fill-primary text-primary" : "h-5 w-5"} />
           </Button>
           <Button
-            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-white hover:bg-white/10"
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground hover:bg-accent/60"
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           >
-            {isPlaying ? <Pause className="h-5 w-5 fill-white" /> : <Play className="h-5 w-5 fill-white" />}
+            {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
           </Button>
           {/* progress hair-line */}
-          <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-white/10">
+          <div className="absolute left-0 right-0 bottom-0 h-1 bg-muted-foreground/15">
             <div
-              className="h-full origin-left bg-white transition-transform duration-150 ease-linear will-change-transform"
+              className="h-full origin-left bg-primary transition-transform duration-150 ease-linear will-change-transform"
               style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
             />
           </div>
         </div>
       )}
 
-      {/* DESKTOP full player bar */}
-      <div className="hidden md:flex h-20 bg-black border-t border-border px-4 items-center gap-4">
-      {/* Song info */}
-      <div className="flex items-center gap-3 w-1/4 min-w-0">
-        {song && (
-          <>
-            <button
-              onClick={openNowPlaying}
-              className="h-14 w-14 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center hover:opacity-90"
-              aria-label="Open now playing"
-            >
-              {song.thumbnail_url ? (
-                <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <Music className="h-6 w-6 text-muted-foreground" />
-              )}
-            </button>
-            <button onClick={openNowPlaying} className="min-w-0 hidden sm:block text-left hover:underline">
-              <div className="text-sm font-medium truncate">{song.title}</div>
-              <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
-            </button>
+      {/* DESKTOP full player bar — fixed at bottom of viewport */}
+      <div className="hidden md:flex fixed bottom-0 left-0 right-0 h-20 z-40 bg-card/95 backdrop-blur-md border-t border-border/80 px-4 items-center gap-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+        {/* Song info */}
+        <div className="flex items-center gap-3 w-1/4 min-w-0">
+          {song && (
+            <>
+              <button
+                onClick={openNowPlaying}
+                className="h-14 w-14 rounded-xl bg-muted shrink-0 overflow-hidden flex items-center justify-center hover:opacity-90 shadow-sm border border-border/60 cursor-pointer"
+                aria-label="Open now playing"
+              >
+                {song.thumbnail_url ? (
+                  <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Music className="h-6 w-6 text-muted-foreground" />
+                )}
+              </button>
+              <button onClick={openNowPlaying} className="min-w-0 hidden sm:block text-left hover:underline cursor-pointer">
+                <div className="text-sm font-semibold truncate text-foreground">{song.title}</div>
+                <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
+              </button>
+              <Button
+                size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer"
+                onClick={() => toggleLike.mutate()}
+              >
+                <Heart className={isLiked ? "h-4 w-4 fill-primary text-primary" : "h-4 w-4"} />
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Controls */}
+        <div className="flex-1 flex flex-col items-center gap-1 max-w-2xl mx-auto">
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={toggleShuffle}>
+              <Shuffle className={shuffle ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={goToPrevious}>
+              <SkipBack className="h-4 w-4" />
+            </Button>
             <Button
-              size="icon" variant="ghost" className="h-8 w-8 shrink-0"
-              onClick={() => toggleLike.mutate()}
+              size="icon"
+              className="h-10 w-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 shadow-md transition flex items-center justify-center cursor-pointer"
+              onClick={togglePlay}
+              disabled={!song}
             >
-              <Heart className={isLiked ? "h-4 w-4 fill-primary text-primary" : "h-4 w-4"} />
+              {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
             </Button>
-          </>
-        )}
-      </div>
-
-      {/* Controls */}
-      <div className="flex-1 flex flex-col items-center gap-1 max-w-2xl mx-auto">
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleShuffle}>
-            <Shuffle className={shuffle ? "h-4 w-4 text-primary" : "h-4 w-4"} />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToPrevious}>
-            <SkipBack className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            className="h-9 w-9 rounded-full bg-white text-black hover:bg-white/90 hover:scale-105 transition"
-            onClick={togglePlay}
-            disabled={!song}
-          >
-            {isPlaying ? <Pause className="h-4 w-4 fill-black" /> : <Play className="h-4 w-4 fill-black" />}
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={advanceToNext}>
-            <SkipForward className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cycleRepeat}>
-            {repeat === "one" ? (
-              <Repeat1 className="h-4 w-4 text-primary" />
-            ) : (
-              <Repeat className={repeat === "all" ? "h-4 w-4 text-primary" : "h-4 w-4"} />
-            )}
-          </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={advanceToNext}>
+              <SkipForward className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={cycleRepeat}>
+              {repeat === "one" ? (
+                <Repeat1 className="h-4 w-4 text-primary" />
+              ) : (
+                <Repeat className={repeat === "all" ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+              )}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 w-full max-w-xl">
+            <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{formatDuration(scrubbing ? scrubValue : progress)}</span>
+            <Slider
+              value={[scrubbing ? scrubValue : progress]}
+              max={duration || 1}
+              step={0.01}
+              onPointerDown={seekTouchHaptic}
+              onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
+              onValueCommit={(v) => { commitSeek(v[0]); seekCommitHaptic(); scrubbingRef.current = false; setScrubbing(false); }}
+              onPointerCancel={() => { scrubbingRef.current = false; setScrubbing(false); }}
+              className="flex-1 group"
+            />
+            <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatDuration(duration)}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 w-full max-w-xl">
-          <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{formatDuration(scrubbing ? scrubValue : progress)}</span>
+
+        {/* Volume + sleep */}
+        <div className="hidden md:flex items-center gap-2 w-1/4 justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" title="Sleep timer">
+                <Clock className={sleepTimer ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {[5, 15, 30, 60].map((m) => (
+                <DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
+                  {m} minutes
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem onClick={() => setSleepTimer(null)}>Cancel timer</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={toggleMute}>
+            {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </Button>
           <Slider
-            value={[scrubbing ? scrubValue : progress]}
-            max={duration || 1}
-            step={0.01}
-            onPointerDown={seekTouchHaptic}
-            onValueChange={(v) => { scrubbingRef.current = true; setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
-            onValueCommit={(v) => { commitSeek(v[0]); seekCommitHaptic(); scrubbingRef.current = false; setScrubbing(false); }}
-            onPointerCancel={() => { scrubbingRef.current = false; setScrubbing(false); }}
-            className="flex-1 group"
+            value={[muted ? 0 : volume * 100]}
+            max={100}
+            step={1}
+            onValueChange={(v) => setVolume(v[0] / 100)}
+            className="w-24"
           />
-          <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatDuration(duration)}</span>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={toggleQueuePanel} title="Queue">
+            <ListMusic className="h-4 w-4" />
+          </Button>
         </div>
-      </div>
-
-      {/* Volume + sleep */}
-      <div className="hidden md:flex items-center gap-2 w-1/4 justify-end">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-8 w-8" title="Sleep timer">
-              <Clock className={sleepTimer ? "h-4 w-4 text-primary" : "h-4 w-4"} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {[5, 15, 30, 60].map((m) => (
-              <DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
-                {m} minutes
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuItem onClick={() => setSleepTimer(null)}>Cancel timer</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleMute}>
-          {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </Button>
-        <Slider
-          value={[muted ? 0 : volume * 100]}
-          max={100}
-          step={1}
-          onValueChange={(v) => setVolume(v[0] / 100)}
-          className="w-24"
-        />
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleQueuePanel} title="Queue">
-          <ListMusic className="h-4 w-4" />
-        </Button>
-      </div>
       </div>
     </>
   );

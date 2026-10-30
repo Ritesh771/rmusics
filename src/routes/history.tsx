@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
 import { useAuth } from "@/lib/auth-hook";
 import type { Song } from "@/lib/player-store";
 import { Clock } from "lucide-react";
 
 export const Route = createFileRoute("/history")({
-  head: () => ({ meta: [{ title: "Recently played — R Musics" }] }),
+  head: () => ({ meta: [{ title: "Sonara — Recently Played" }] }),
   component: HistoryPage,
 });
 
@@ -34,8 +33,7 @@ function HistoryPage() {
   });
 
   return (
-    <Layout>
-      <div className="p-6">
+    <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
           <Clock className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-bold">Recently played</h1>
@@ -48,6 +46,5 @@ function HistoryPage() {
           </div>
         )}
       </div>
-    </Layout>
   );
 }

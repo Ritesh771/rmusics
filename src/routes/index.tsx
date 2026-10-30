@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
 import { SongMenu } from "@/components/SongMenu";
 import type { Song } from "@/lib/player-store";
@@ -23,11 +22,11 @@ function greeting() {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "R Musics — Free Music Streaming, Playlists & Player" },
-      { name: "description", content: "R Musics is a free Spotify-style music streaming app. Discover songs, build playlists, like tracks, and enjoy a beautiful player on any device." },
-      { name: "keywords", content: "r musics, rmusics, r music, music streaming, free music, playlists, spotify clone, online music player" },
-      { property: "og:title", content: "R Musics — Free Music Streaming" },
-      { property: "og:description", content: "Stream music, build playlists, and enjoy a beautiful player. Free on any device." },
+      { title: "Sonara — Music Beyond Boundaries" },
+      { name: "description", content: "Sonara — premium music streaming. Discover songs, build playlists, like tracks, and enjoy a beautiful player on any device." },
+      { name: "keywords", content: "sonara, music streaming, premium music player, playlists, online music player" },
+      { property: "og:title", content: "Sonara — Music Beyond Boundaries" },
+      { property: "og:description", content: "Stream music, build playlists, and enjoy a beautiful player. Music Beyond Boundaries." },
       { property: "og:url", content: "https://rmusics.lovable.app/" },
     ],
     links: [{ rel: "canonical", href: "https://rmusics.lovable.app/" }],
@@ -77,26 +76,9 @@ function HomePage() {
   }
 
   return (
-    <Layout>
-      <div className="p-6 space-y-8">
+    <div className="p-6 space-y-8">
         <div className="animate-fade-in">
-          <h1 className="text-3xl font-bold mb-4">{greeting()}</h1>
-          <a
-            href="https://riteshn.me"
-            target="_blank"
-            rel="noreferrer"
-            className="mb-5 inline-flex items-center gap-3 rounded-full border border-white/10 bg-card/60 backdrop-blur px-3 py-2 hover:bg-accent transition group"
-          >
-            <img
-              src="https://github.com/Ritesh771.png"
-              alt="Ritesh N."
-              className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/40 group-hover:ring-primary transition"
-            />
-            <div className="leading-tight pr-2">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Developed by</div>
-              <div className="text-sm font-semibold">Ritesh N.</div>
-            </div>
-          </a>
+          <h1 className="text-3xl font-bold mb-5">{greeting()}</h1>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recent.slice(0, 6).map((s) => (
               <div key={s.id} className="group relative flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden transition">
@@ -219,7 +201,6 @@ function HomePage() {
           </div>
         )}
       </div>
-    </Layout>
   );
 }
 

@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Trash2, Upload, Music, Loader2, FileAudio, AlertTriangle } from "lucide-react";
@@ -14,7 +13,7 @@ import { parseBlob } from "music-metadata";
 import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Wavely — Admin" }] }),
+  head: () => ({ meta: [{ title: "Sonara — Admin Dashboard" }] }),
   component: AdminPage,
 });
 

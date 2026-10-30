@@ -2,13 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { Music, Heart, Search as SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/library")({
-  head: () => ({ meta: [{ title: "Wavely — Library" }] }),
+  head: () => ({ meta: [{ title: "Sonara — Library" }] }),
   component: LibraryPage,
 });
 
@@ -54,8 +53,7 @@ function LibraryPage() {
   const showLiked = !term || "liked songs".includes(term);
 
   return (
-    <Layout>
-      <div className="p-6">
+    <div className="p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h1 className="text-3xl font-bold">Your Library</h1>
           <div className="relative w-full sm:w-72">
@@ -96,6 +94,5 @@ function LibraryPage() {
           )}
         </div>
       </div>
-    </Layout>
   );
 }

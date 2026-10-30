@@ -1,33 +1,47 @@
-import { useEffect, useState } from "react";
+import { create } from "zustand";
 import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import type { User, Session } from "@supabase/supabase-js";
 
 export type AuthState = {
   user: User | null;
   loading: boolean;
 };
 
+interface AuthStore {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  initialized: boolean;
+  setSession: (session: Session | null) => void;
+}
+
+export const useAuthStore = create<AuthStore>((set) => ({
+  user: null,
+  session: null,
+  loading: true,
+  initialized: false,
+  setSession: (session) => set({
+    user: session?.user ?? null,
+    session: session ?? null,
+    loading: false,
+    initialized: true,
+  }),
+}));
+
+// Initialize auth state once on client startup
+if (typeof window !== "undefined") {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    useAuthStore.getState().setSession(session);
+  });
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    useAuthStore.getState().setSession(session);
+  });
+}
+
 export function useAuth(): AuthState {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      setUser(data.user ?? null);
-      setLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
+  const user = useAuthStore((s) => s.user);
+  const loading = useAuthStore((s) => s.loading);
   return { user, loading };
 }
 

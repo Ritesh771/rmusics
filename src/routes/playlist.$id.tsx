@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
 import { Music, Play, Pencil, Trash2, Share2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,12 +27,6 @@ function PlaylistPage() {
 
   const downloadAll = async (list: Song[]) => {
     if (!list.length || downloading) return;
-    const code = window.prompt("Enter coupon code to download");
-    if (code === null) return;
-    if (code.trim() !== "Ritesh771") {
-      toast.error("Invalid coupon code");
-      return;
-    }
     setDownloading(true);
     setDlProgress(0);
     try {
@@ -123,10 +116,10 @@ function PlaylistPage() {
     },
   });
 
-  if (!playlist) return <Layout><div className="p-6">Loading…</div></Layout>;
+  if (!playlist) return <div className="p-6">Loading…</div>;
 
   return (
-    <Layout>
+    <>
       <div className="bg-gradient-to-b from-primary/30 to-transparent p-6 pb-12">
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6">
           <div className="h-44 w-44 bg-muted rounded shadow-2xl overflow-hidden flex items-center justify-center">
@@ -196,6 +189,6 @@ function PlaylistPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 }

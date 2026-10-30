@@ -2,14 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Layout } from "@/components/Layout";
 import { SongRow } from "@/components/SongRow";
 import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, Music, X, Loader2 } from "lucide-react";
 import type { Song } from "@/lib/player-store";
 
 export const Route = createFileRoute("/search")({
-  head: () => ({ meta: [{ title: "Wavely — Search" }] }),
+  head: () => ({ meta: [{ title: "Sonara — Search" }] }),
   component: SearchPage,
 });
 
@@ -63,8 +62,7 @@ function SearchPage() {
   ];
 
   return (
-    <Layout>
-      <div className="p-6 space-y-8 animate-fade-in">
+    <div className="p-6 space-y-8 animate-fade-in">
         <div className="relative max-w-xl">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -150,6 +148,5 @@ function SearchPage() {
           </section>
         )}
       </div>
-    </Layout>
   );
 }

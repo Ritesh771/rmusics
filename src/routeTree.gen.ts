@@ -14,6 +14,7 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LikedRouteImport } from './routes/liked'
 import { Route as LibraryRouteImport } from './routes/library'
+import { Route as ImportRouteImport } from './routes/import'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -43,6 +44,11 @@ const LikedRoute = LikedRouteImport.update({
 const LibraryRoute = LibraryRouteImport.update({
   id: '/library',
   path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportRoute = ImportRouteImport.update({
+  id: '/import',
+  path: '/import',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/history': typeof HistoryRoute
+  '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/history'
+    | '/import'
     | '/library'
     | '/liked'
     | '/login'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/history'
+    | '/import'
     | '/library'
     | '/liked'
     | '/login'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/history'
+    | '/import'
     | '/library'
     | '/liked'
     | '/login'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   HistoryRoute: typeof HistoryRoute
+  ImportRoute: typeof ImportRoute
   LibraryRoute: typeof LibraryRoute
   LikedRoute: typeof LikedRoute
   LoginRoute: typeof LoginRoute
@@ -197,6 +210,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/import': {
+      id: '/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof ImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/history': {
       id: '/history'
       path: '/history'
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   HistoryRoute: HistoryRoute,
+  ImportRoute: ImportRoute,
   LibraryRoute: LibraryRoute,
   LikedRoute: LikedRoute,
   LoginRoute: LoginRoute,

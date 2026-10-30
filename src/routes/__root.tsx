@@ -4,11 +4,13 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { Layout } from "@/components/Layout";
 import { Player } from "@/components/Player";
 import { NowPlaying } from "@/components/NowPlaying";
 import { QueuePanel } from "@/components/QueuePanel";
@@ -79,38 +81,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "R Musics — Free Music Streaming & Playlists" },
-      { name: "description", content: "R Musics — free Spotify-style music streaming. Discover songs, build playlists, like tracks, and enjoy a beautiful player anywhere." },
-      { name: "keywords", content: "r musics, rmusics, r music, music streaming, free music player, playlists, online music, spotify alternative" },
-      { name: "author", content: "Ritesh N." },
+      { title: "Sonara — Music Beyond Boundaries" },
+      { name: "description", content: "Sonara — premium music streaming. Discover songs, build playlists, like tracks, and enjoy a beautiful player anywhere." },
+      { name: "keywords", content: "sonara, music streaming, premium music player, playlists, online music" },
       { name: "robots", content: "index, follow" },
-      { property: "og:site_name", content: "R Musics" },
-      { property: "og:title", content: "R Musics — Free Music Streaming" },
-      { property: "og:description", content: "Stream music, build playlists and enjoy a beautiful player. Free on any device." },
+      { property: "og:site_name", content: "Sonara" },
+      { property: "og:title", content: "Sonara — Music Beyond Boundaries" },
+      { property: "og:description", content: "Stream music, build playlists and enjoy a beautiful player. Music Beyond Boundaries." },
       { property: "og:type", content: "website" },
       // Dual theme-color so the PWA / iOS status bar / Android chrome match
       // the user's system (or in-app) theme. The theme-store also swaps the
       // no-media fallback live when the user toggles theme inside the app.
-      { name: "theme-color", content: "#000000" },
+      { name: "theme-color", content: "#ffffff" },
       { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#ffffff" },
-      { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#000000" },
+      { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#0d0b14" },
       { name: "color-scheme", content: "light dark" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-title", content: "R Musics" },
+      { name: "apple-mobile-web-app-title", content: "Sonara" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "R Musics — Free Music Streaming" },
+      { name: "twitter:title", content: "Sonara — Music Beyond Boundaries" },
       { name: "twitter:description", content: "Stream music, build playlists, enjoy a beautiful player." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/9Fqw0s8nIfV04662WALvNrgwsK33/social-images/social-1779678708323-1833.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/9Fqw0s8nIfV04662WALvNrgwsK33/social-images/social-1779678708323-1833.webp" },
+      { property: "og:image", content: "/icon-512.png" },
+      { name: "twitter:image", content: "/icon-512.png" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "icon", href: "/icon-192.png" },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/icon-192.png" },
     ],
@@ -120,10 +121,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "WebSite",
-          name: "R Musics",
-          alternateName: ["RMusics", "R Music"],
+          name: "Sonara",
+          alternateName: ["Sonara Music"],
           url: "https://rmusics.lovable.app/",
-          description: "Free Spotify-style music streaming app with playlists and a beautiful player.",
+          description: "Premium music streaming app with playlists and a beautiful player.",
           potentialAction: {
             "@type": "SearchAction",
             target: "https://rmusics.lovable.app/search?q={search_term_string}",
@@ -136,10 +137,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "Organization",
-          name: "R Musics",
+          name: "Sonara",
           url: "https://rmusics.lovable.app/",
           logo: "https://rmusics.lovable.app/icon-512.png",
-          founder: { "@type": "Person", name: "Ritesh N.", url: "https://riteshn.me" },
         }),
       },
     ],
@@ -180,16 +180,28 @@ function RootComponent() {
 }
 
 function RootInner() {
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const isLoginPage = pathname === "/login";
   const { user } = useAuth();
   usePersistentQueue(user?.id ?? null);
   const theme = useTheme();
+
+  if (isLoginPage) {
+    return (
+      <>
+        <Outlet />
+        <Toaster theme={theme} />
+      </>
+    );
+  }
+
   return (
-    <>
+    <Layout>
       <Outlet />
       <Player />
       <NowPlaying />
       <QueuePanel />
       <Toaster theme={theme} />
-    </>
+    </Layout>
   );
 }

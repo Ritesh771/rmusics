@@ -16,7 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const nav = useNavigate();
   const { user, loading } = useAuth();
 
-  // Realtime invalidation
+  // Realtime updates for library, playlists, and songs
   useEffect(() => {
     const ch = supabase
       .channel("realtime-all")
@@ -39,20 +39,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [qc]);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      qc.invalidateQueries();
-      if (event === "SIGNED_OUT") nav({ to: "/login" });
-    });
-    return () => subscription.unsubscribe();
-  }, [qc, nav]);
-
-  useEffect(() => {
     if (!loading && !user) nav({ to: "/login" });
   }, [loading, user, nav]);
 
   if (loading || !user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-black">
+      <div className="h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -66,11 +58,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-black overflow-hidden relative">
+    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden relative">
       <MoodBackdrop intensity={0.7} />
       <div className="flex-1 flex min-h-0 relative z-10">
         <Sidebar />
-        <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-36 md:pb-2">
+        <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-36 md:pb-24">
           <div className="flex justify-end items-center gap-2 p-3 md:p-4 sticky top-0 z-30 bg-gradient-to-b from-background/80 to-transparent backdrop-blur">
             <ProfileMenu />
           </div>
@@ -78,7 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-black/95 backdrop-blur border-t border-border flex justify-around items-center z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur border-t border-border flex justify-around items-center z-50">
         {mobileNav.map((it) => (
           <Link
             key={it.to}
