@@ -2,6 +2,7 @@ import { usePlayer } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
 import { X, GripVertical, Trash2, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { cleanSongTitle } from "@/lib/song-utils";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -97,7 +98,7 @@ function Row({ song, highlight, onJump }: { song: any; highlight?: boolean; onJu
         {song.thumbnail_url ? <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" /> : <Music className="h-5 w-5 text-muted-foreground" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className={cn("text-sm font-semibold truncate text-foreground", highlight && "text-primary font-bold")}>{song.title}</div>
+        <div className={cn("text-sm font-semibold truncate text-foreground", highlight && "text-primary font-bold")}>{cleanSongTitle(song.title)}</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">{song.artist}</div>
       </div>
     </button>

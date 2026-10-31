@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlayer, type Song } from "@/lib/player-store";
+import { cn } from "@/lib/utils";
 import {
   Play,
   Pause,
@@ -9,19 +10,25 @@ import {
   Repeat,
   Repeat1,
   Volume2,
+  Volume1,
   VolumeX,
   Heart,
   Clock,
   Music,
+  PanelRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/owner";
+import { cleanSongTitle } from "@/lib/song-utils";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { streamUrl } from "@/lib/stream-url";
 import { useShakeVolume } from "@/lib/use-shake-volume";
 import { seekCommitHaptic, seekDragHaptic, seekTouchHaptic } from "@/lib/haptics";
+import { attachEqualizerToAudio, resumeAudioContext } from "@/lib/equalizer-store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -71,7 +78,11 @@ export function Player() {
   const clearSeek = usePlayer((s) => s.clearSeek);
   const setSleepTimer = usePlayer((s) => s.setSleepTimer);
   const openNowPlaying = usePlayer((s) => s.openNowPlaying);
+  const nowPlayingOpen = usePlayer((s) => s.nowPlayingOpen);
+  const toggleNowPlaying = usePlayer((s) => s.toggleNowPlaying);
   const toggleQueuePanel = usePlayer((s) => s.toggleQueuePanel);
+  const sidebarRightOpen = usePlayer((s) => s.sidebarRightOpen);
+  const toggleSidebarRight = usePlayer((s) => s.toggleSidebarRight);
   const qc = useQueryClient();
   const { user } = useAuth();
   useShakeVolume();
@@ -112,6 +123,7 @@ export function Player() {
   // only honor a later one once the new stream is buffered — without this the
   // queue silently stops after a couple of tracks.
   const ensurePlaying = useCallback((attempt = 0) => {
+    resumeAudioContext();
     if (playRetryRef.current) {
       clearTimeout(playRetryRef.current);
       playRetryRef.current = null;
@@ -543,12 +555,19 @@ export function Player() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });
 
+  useEffect(() => {
+    if (audioRef.current) {
+      attachEqualizerToAudio(audioRef.current);
+    }
+  }, []);
+
   return (
     <>
       <audio
         ref={audioRef}
         preload="auto"
         playsInline
+        crossOrigin="anonymous"
         onLoadedMetadata={(e) => {
           const audio = e.currentTarget;
           const loadedSong = usePlayer.getState().currentSong();
@@ -638,7 +657,7 @@ export function Player() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold truncate text-foreground">{song.title}</div>
+            <div className="text-sm font-semibold truncate text-foreground">{cleanSongTitle(song.title)}</div>
             <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
           </div>
           <Button
@@ -671,15 +690,15 @@ export function Player() {
       )}
 
       {/* DESKTOP full player bar — fixed at bottom of viewport */}
-      <div className="hidden md:flex fixed bottom-0 left-0 right-0 h-20 z-40 bg-card/95 backdrop-blur-md border-t border-border/80 px-4 items-center gap-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+      <div className="hidden md:flex fixed bottom-0 left-0 right-0 h-20 z-50 bg-card/95 backdrop-blur-md border-t border-border/80 px-4 items-center gap-4 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
         {/* Song info */}
         <div className="flex items-center gap-3 w-1/4 min-w-0">
           {song && (
             <>
               <button
-                onClick={openNowPlaying}
+                onClick={toggleNowPlaying}
                 className="h-14 w-14 rounded-xl bg-muted shrink-0 overflow-hidden flex items-center justify-center hover:opacity-90 shadow-sm border border-border/60 cursor-pointer"
-                aria-label="Open now playing"
+                aria-label="Toggle now playing"
               >
                 {song.thumbnail_url ? (
                   <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />
@@ -687,8 +706,8 @@ export function Player() {
                   <Music className="h-6 w-6 text-muted-foreground" />
                 )}
               </button>
-              <button onClick={openNowPlaying} className="min-w-0 hidden sm:block text-left hover:underline cursor-pointer">
-                <div className="text-sm font-semibold truncate text-foreground">{song.title}</div>
+              <button onClick={toggleNowPlaying} className="min-w-0 hidden sm:block text-left hover:underline cursor-pointer">
+                <div className="text-sm font-semibold truncate text-foreground">{cleanSongTitle(song.title)}</div>
                 <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
               </button>
               <Button
@@ -762,18 +781,70 @@ export function Player() {
               <DropdownMenuItem onClick={() => setSleepTimer(null)}>Cancel timer</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={toggleMute}>
-            {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          {/* Volume control */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer shrink-0"
+            onClick={toggleMute}
+            title={muted ? "Unmute" : "Mute"}
+          >
+            {muted || volume === 0 ? (
+              <VolumeX className="h-4 w-4" />
+            ) : volume < 0.5 ? (
+              <Volume1 className="h-4 w-4" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
+            )}
           </Button>
           <Slider
             value={[muted ? 0 : volume * 100]}
             max={100}
             step={1}
-            onValueChange={(v) => setVolume(v[0] / 100)}
-            className="w-24"
+            onValueChange={(v) => {
+              if (muted) toggleMute();
+              setVolume(v[0] / 100);
+            }}
+            className="w-24 lg:w-28 cursor-pointer"
           />
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer" onClick={toggleQueuePanel} title="Queue">
+
+          {/* Right sidebar toggle */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              "h-8 w-8 hover:bg-accent/60 cursor-pointer shrink-0",
+              sidebarRightOpen ? "text-primary" : "text-foreground/80 hover:text-foreground"
+            )}
+            onClick={toggleSidebarRight}
+            title="Now playing side view"
+          >
+            <PanelRight className="h-4 w-4" />
+          </Button>
+
+          {/* Queue toggle */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-foreground/80 hover:text-foreground hover:bg-accent/60 cursor-pointer shrink-0"
+            onClick={toggleQueuePanel}
+            title="Queue"
+          >
             <ListMusic className="h-4 w-4" />
+          </Button>
+
+          {/* Full-screen Now Playing toggle like Spotify */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              "h-8 w-8 hover:bg-accent/60 cursor-pointer shrink-0",
+              nowPlayingOpen ? "text-primary" : "text-foreground/80 hover:text-foreground"
+            )}
+            onClick={toggleNowPlaying}
+            title={nowPlayingOpen ? "Exit full screen" : "Full screen"}
+          >
+            {nowPlayingOpen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
         </div>
       </div>

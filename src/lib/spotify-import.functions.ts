@@ -7,6 +7,7 @@ import os from "os";
 import { execSync } from "child_process";
 import { AwsClient } from "aws4fetch";
 import * as musicMetadata from "music-metadata";
+import { cleanSongTitle } from "./song-utils";
 
 export interface SpotifyTrackMeta {
   uri: string;
@@ -537,6 +538,7 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
         }
 
         const newSongId = crypto.randomUUID();
+        const genre = inferLanguageGenre(track.title, track.artist, track.album || "");
         const insertRes = await fetch(`${supabaseUrl}/rest/v1/songs`, {
           method: "POST",
           headers: {
@@ -547,10 +549,11 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
           },
           body: JSON.stringify({
             id: newSongId,
-            title: track.title,
+            title: cleanSongTitle(track.title),
             artist: track.artist,
             album: track.album || null,
             duration: duration,
+            genre: genre,
             audio_url: audioUrl,
             thumbnail_url: coverUrl,
           }),
@@ -577,7 +580,24 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
       throw new Error("Unable to add any songs to the playlist.");
     }
 
-    // 2. Create the playlist in Supabase
+    // 2. Cache playlist cover art to R2 if provided
+    let finalCoverUrl = data.coverArt || null;
+    if (finalCoverUrl && finalCoverUrl.startsWith("http") && !finalCoverUrl.includes(r2.publicUrl)) {
+      try {
+        const imgRes = await fetch(finalCoverUrl);
+        if (imgRes.ok) {
+          const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+          const cType = imgRes.headers.get("content-type") || "image/jpeg";
+          const ext = cType.includes("png") ? "png" : "jpg";
+          const r2Key = `covers/playlist-${Date.now()}.${ext}`;
+          finalCoverUrl = await uploadToR2(r2, r2Key, imgBuf, cType);
+        }
+      } catch (covErr) {
+        console.warn("Failed to cache playlist cover to R2:", covErr);
+      }
+    }
+
+    // 3. Create the playlist in Supabase
     const createPlRes = await fetch(`${supabaseUrl}/rest/v1/playlists`, {
       method: "POST",
       headers: {
@@ -589,7 +609,7 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
       body: JSON.stringify({
         name: data.playlistName.trim(),
         description: data.playlistDescription?.trim() || null,
-        cover_url: data.coverArt || null,
+        cover_url: finalCoverUrl,
         user_id: data.userId,
         is_public: true,
       }),
@@ -634,5 +654,302 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
       name: createdPlaylist.name,
       totalTracks: uniqueSongIds.length,
       newlyDownloaded,
+    };
+  });
+
+export function inferLanguageGenre(title: string, artist: string, album: string = ""): string {
+  const combined = `${title} ${artist} ${album}`.toLowerCase();
+  if (combined.includes("lofi") || combined.includes("lo-fi") || combined.includes("slowed") || combined.includes("reverb")) {
+    return "Chill & Lo-Fi";
+  }
+  if (
+    combined.includes("anirudh") || combined.includes("leo") || combined.includes("vettaiyan") ||
+    combined.includes("arabic kuthu") || combined.includes("dippam") || combined.includes("moonu") ||
+    combined.includes("naa ready") || combined.includes("aasa kooda") || combined.includes("manasilaayo") ||
+    combined.includes("megham karukatha") || combined.includes("yuvan") || combined.includes("tamil")
+  ) {
+    return "Tamil";
+  }
+  if (
+    combined.includes("ala vaikunthapurramuloo") || combined.includes("buttabomma") ||
+    combined.includes("ramuloo ramulaa") || combined.includes("samajavaragamana") ||
+    combined.includes("daaku maharaaj") || combined.includes("dabidi dibidi") ||
+    combined.includes("chuttamalle") || combined.includes("devara") || combined.includes("telugu")
+  ) {
+    return "Telugu";
+  }
+  if (
+    combined.includes("chandan shetty") || combined.includes("vijay prakash") ||
+    combined.includes("gaalipata") || combined.includes("kgf") || combined.includes("kantara") ||
+    combined.includes("googly") || combined.includes("sidlingu") || combined.includes("paramathma") ||
+    combined.includes("anna from mexico") || combined.includes("tagaru") || combined.includes("ekka") ||
+    combined.includes("singara siriye") || combined.includes("puttamalli") || combined.includes("kannada")
+  ) {
+    return "Kannada";
+  }
+  if (
+    combined.includes("bad newz") || combined.includes("tauba tauba") || combined.includes("stree 2") ||
+    combined.includes("aaj ki raat") || combined.includes("chikni chameli") || combined.includes("jawan") ||
+    combined.includes("rocky aur rani") || combined.includes("what jhumka") || combined.includes("tere vaaste") ||
+    combined.includes("zara hatke") || combined.includes("arijit") || combined.includes("pritam") ||
+    combined.includes("sachin-jigar") || combined.includes("tanishk bagchi") || combined.includes("dilbar") ||
+    combined.includes("hindi") || combined.includes("bollywood")
+  ) {
+    return "Hindi";
+  }
+  if (combined.includes("aavesham") || combined.includes("illuminati") || combined.includes("malayalam")) {
+    return "Malayalam";
+  }
+  return "Pop & Indie";
+}
+
+const syncSingleTrackSchema = z.object({
+  track: z.object({
+    title: z.string(),
+    artist: z.string(),
+    album: z.string().optional(),
+    duration: z.number().optional(),
+    coverUrl: z.string().optional(),
+  }),
+});
+
+export const syncSingleTrack = createServerFn({ method: "POST" })
+  .inputValidator((input) => syncSingleTrackSchema.parse(input))
+  .handler(async ({ data }) => {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase credentials not configured on server.");
+    }
+
+    const { track } = data;
+    const targetT = normalizeSongText(track.title);
+    const targetA = normalizeSongText(track.artist);
+
+    // 1. Check if track already exists in Supabase
+    try {
+      const songsRes = await fetch(`${supabaseUrl}/rest/v1/songs?select=id,title,artist`, {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      });
+      if (songsRes.ok) {
+        const dbSongs: Array<{ id: string; title: string; artist: string }> = await songsRes.json();
+        const existingMatch = dbSongs.find((db) => {
+          const dbT = normalizeSongText(db.title);
+          const dbA = normalizeSongText(db.artist);
+          if (targetT === dbT) return true;
+          if (targetT.length >= 4 && (targetT.includes(dbT) || dbT.includes(targetT))) {
+            const firstA = targetA.split(" ")[0];
+            if (firstA && (dbA.includes(firstA) || firstA.includes(dbA.split(" ")[0]))) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (existingMatch) {
+          return {
+            songId: existingMatch.id,
+            isNew: false,
+            title: cleanSongTitle(track.title),
+            artist: track.artist,
+          };
+        }
+      }
+    } catch (chkErr) {
+      console.warn("Deduplication check error:", chkErr);
+    }
+
+    // 2. Download missing audio and upload to R2
+    const r2 = getR2Client();
+    const tempDir = path.join(
+      os.tmpdir(),
+      `sonara_sync_single_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    );
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    try {
+      const outTemplate = path.join(tempDir, "audio.%(ext)s");
+      const query = `${track.title} ${track.artist} song audio`;
+
+      try {
+        execSync(
+          `yt-dlp -f "ba[ext=m4a]/ba" --no-playlist --no-warnings -o "${outTemplate}" "ytsearch1:${query.replace(/"/g, "")}"`,
+          { stdio: "ignore", timeout: 45000 }
+        );
+      } catch {
+        execSync(
+          `yt-dlp -f "ba[ext=m4a]/ba" --no-playlist --no-warnings -o "${outTemplate}" "ytsearch1:${track.title.replace(/"/g, "")} ${track.artist.replace(/"/g, "")}"`,
+          { stdio: "ignore", timeout: 45000 }
+        );
+      }
+
+      const files = fs.readdirSync(tempDir);
+      const audioFile = files.find((f) => f.startsWith("audio."));
+      if (!audioFile) {
+        throw new Error(`Audio download failed for ${track.title}`);
+      }
+
+      const audioPath = path.join(tempDir, audioFile);
+      const audioBuffer = fs.readFileSync(audioPath);
+
+      let duration = track.duration || 180;
+      try {
+        const metaData = await musicMetadata.parseFile(audioPath);
+        if (metaData.format.duration) duration = Math.round(metaData.format.duration);
+      } catch {}
+
+      let coverBuffer: Buffer | null = null;
+      if (track.coverUrl) {
+        try {
+          const cRes = await fetch(track.coverUrl);
+          if (cRes.ok) coverBuffer = Buffer.from(await cRes.arrayBuffer());
+        } catch {}
+      }
+
+      const timestamp = Date.now();
+      const rand = Math.random().toString(36).slice(2, 7);
+      const safeSlug = track.title.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 40);
+
+      const audioKey = `songs/${timestamp}-${rand}-${safeSlug}.m4a`;
+      const audioUrl = await uploadToR2(r2, audioKey, audioBuffer, "audio/mp4");
+
+      let coverUrl: string | null = null;
+      if (coverBuffer) {
+        const coverKey = `songs/${timestamp}-${rand}-${safeSlug}.jpeg`;
+        coverUrl = await uploadToR2(r2, coverKey, coverBuffer, "image/jpeg");
+      }
+
+      const newSongId = crypto.randomUUID();
+      const genre = inferLanguageGenre(track.title, track.artist, track.album || "");
+
+      const insertRes = await fetch(`${supabaseUrl}/rest/v1/songs`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          id: newSongId,
+          title: cleanSongTitle(track.title),
+          artist: track.artist,
+          album: track.album || null,
+          duration: duration,
+          genre: genre,
+          audio_url: audioUrl,
+          thumbnail_url: coverUrl,
+        }),
+      });
+
+      if (!insertRes.ok) {
+        throw new Error(`Failed to insert song into Supabase: ${await insertRes.text()}`);
+      }
+
+      return {
+        songId: newSongId,
+        isNew: true,
+        title: cleanSongTitle(track.title),
+        artist: track.artist,
+      };
+    } finally {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
+
+const saveImportedPlaylistSchema = z.object({
+  playlistName: z.string(),
+  playlistDescription: z.string().optional(),
+  coverArt: z.string().optional(),
+  userId: z.string(),
+  songIds: z.array(z.string()),
+});
+
+export const saveImportedPlaylist = createServerFn({ method: "POST" })
+  .inputValidator((input) => saveImportedPlaylistSchema.parse(input))
+  .handler(async ({ data }) => {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase credentials not configured on server.");
+    }
+
+    const r2 = getR2Client();
+    let finalCoverUrl = data.coverArt || null;
+    if (finalCoverUrl && finalCoverUrl.startsWith("http") && !finalCoverUrl.includes(r2.publicUrl)) {
+      try {
+        const imgRes = await fetch(finalCoverUrl);
+        if (imgRes.ok) {
+          const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+          const cType = imgRes.headers.get("content-type") || "image/jpeg";
+          const ext = cType.includes("png") ? "png" : "jpg";
+          const r2Key = `covers/playlist-${Date.now()}.${ext}`;
+          finalCoverUrl = await uploadToR2(r2, r2Key, imgBuf, cType);
+        }
+      } catch (covErr) {
+        console.warn("Failed to cache playlist cover to R2:", covErr);
+      }
+    }
+
+    const createPlRes = await fetch(`${supabaseUrl}/rest/v1/playlists`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        name: data.playlistName.trim(),
+        description: data.playlistDescription?.trim() || null,
+        cover_url: finalCoverUrl,
+        user_id: data.userId,
+        is_public: true,
+      }),
+    });
+
+    if (!createPlRes.ok) {
+      throw new Error(`Failed to create playlist: ${await createPlRes.text()}`);
+    }
+
+    const [createdPlaylist] = await createPlRes.json();
+    const uniqueSongIds = Array.from(new Set(data.songIds));
+
+    const playlistSongsRows = uniqueSongIds.map((songId, index) => ({
+      playlist_id: createdPlaylist.id,
+      song_id: songId,
+      position: index,
+    }));
+
+    for (let i = 0; i < playlistSongsRows.length; i += 50) {
+      const batch = playlistSongsRows.slice(i, i + 50);
+      const batchRes = await fetch(`${supabaseUrl}/rest/v1/playlist_songs`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=ignore-duplicates",
+        },
+        body: JSON.stringify(batch),
+      });
+      if (!batchRes.ok) {
+        console.warn(`Error inserting playlist_songs batch at ${i}:`, await batchRes.text());
+      }
+    }
+
+    return {
+      playlistId: createdPlaylist.id,
+      name: createdPlaylist.name,
+      totalTracks: uniqueSongIds.length,
     };
   });

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SongRow } from "@/components/SongRow";
+import { SongTableSkeleton } from "@/components/Skeletons";
 import { useAuth } from "@/lib/auth-hook";
 import type { Song } from "@/lib/player-store";
 import { Clock } from "lucide-react";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/history")({
 
 function HistoryPage() {
   const { user } = useAuth();
-  const { data: songs = [] } = useQuery({
+  const { data: songs = [], isLoading } = useQuery({
     queryKey: ["recently_played", user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -30,7 +31,20 @@ function HistoryPage() {
       return out;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
+
+  if (isLoading && songs.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Clock className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold">Recently played</h1>
+        </div>
+        <SongTableSkeleton rows={8} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

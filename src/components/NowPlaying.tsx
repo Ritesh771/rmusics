@@ -1,24 +1,41 @@
 import { usePlayer, type Song } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+import { useRouterState } from "@tanstack/react-router";
 import {
-  ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
-  Heart, Music, MoreHorizontal, ListMusic, Volume2, VolumeX,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  ChevronDown, Music, Share2, ListMusic, Play, Heart,
 } from "lucide-react";
-import { formatDuration } from "@/lib/owner";
+import { cleanSongTitle } from "@/lib/song-utils";
 import { useAuth } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useRef, type TouchEvent } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { MoodBackdrop } from "./MoodBackdrop";
-import { seekCommitHaptic, seekDragHaptic, seekTouchHaptic } from "@/lib/haptics";
+import { toast } from "sonner";
 
 export function NowPlaying() {
   const nowPlayingOpen = usePlayer((s) => s.nowPlayingOpen);
   const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const prevPath = useRef(pathname);
+
+  // Automatically close expanded view when user navigates to any page
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      if (nowPlayingOpen) {
+        usePlayer.getState().closeNowPlaying();
+      }
+    }
+  }, [pathname, nowPlayingOpen]);
 
   useEffect(() => {
     if (nowPlayingOpen && song) {
@@ -32,7 +49,7 @@ export function NowPlaying() {
     const id = window.setTimeout(() => {
       setMounted(false);
       setClosing(false);
-    }, 180);
+    }, 200);
     return () => window.clearTimeout(id);
   }, [mounted, nowPlayingOpen, song]);
 
@@ -45,50 +62,26 @@ export function NowPlaying() {
 
 function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) {
   const closeNowPlaying = usePlayer((s) => s.closeNowPlaying);
-  const isPlaying = usePlayer((s) => s.isPlaying);
-  const togglePlay = usePlayer((s) => s.togglePlay);
-  const next = usePlayer((s) => s.next);
-  const prev = usePlayer((s) => s.prev);
-  const progress = usePlayer((s) => s.progress);
-  const duration = usePlayer((s) => s.duration);
-  const seek = usePlayer((s) => s.seek);
-  const shuffle = usePlayer((s) => s.shuffle);
-  const repeat = usePlayer((s) => s.repeat);
-  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
-  const cycleRepeat = usePlayer((s) => s.cycleRepeat);
   const queue = usePlayer((s) => s.queue);
   const currentIndex = usePlayer((s) => s.currentIndex);
-  const volume = usePlayer((s) => s.volume);
-  const muted = usePlayer((s) => s.muted);
-  const setVolume = usePlayer((s) => s.setVolume);
-  const toggleMute = usePlayer((s) => s.toggleMute);
-  const [showQueue, setShowQueue] = useState(false);
-  const [scrubbing, setScrubbing] = useState(false);
-  const [scrubValue, setScrubValue] = useState(0);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const swipeRef = useRef<HTMLDivElement | null>(null);
-  const swipeDX = useRef(0);
-  const swipeRaf = useRef(0);
+  const next = usePlayer((s) => s.next);
+  const toggleQueuePanel = usePlayer((s) => s.toggleQueuePanel);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  useEffect(() => {
-    if (closing) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNowPlaying(); };
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [closing, closeNowPlaying]);
+  const nextSong = queue[currentIndex + 1] ?? null;
 
   useEffect(() => {
-    if (!closing) return;
-    setShowQueue(false);
-    swipeDX.current = 0;
-    if (swipeRef.current) swipeRef.current.style.transform = "";
-  }, [closing]);
+    if (closing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeNowPlaying();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [closing, closeNowPlaying]);
 
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
@@ -98,193 +91,232 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
     },
     enabled: !!user,
   });
-  const isLiked = song ? liked.includes(song.id) : false;
+  const isLiked = liked.includes(song.id);
 
   const toggleLike = useMutation({
     mutationFn: async () => {
-      if (!song || !user) return;
-      if (isLiked) await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("user_id", user.id);
-      else await supabase.from("liked_songs").insert({ song_id: song.id, user_id: user.id });
+      if (!user) return;
+      if (isLiked) {
+        await supabase.from("liked_songs").delete().eq("song_id", song.id).eq("user_id", user.id);
+      } else {
+        await supabase.from("liked_songs").insert({ song_id: song.id, user_id: user.id });
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });
 
-  const onTouchStart = (e: TouchEvent) => {
-    const t = e.touches[0];
-    touchStart.current = { x: t.clientX, y: t.clientY };
-    if (swipeRef.current) swipeRef.current.style.transition = "none";
-  };
-  const onTouchMove = (e: TouchEvent) => {
-    if (!touchStart.current) return;
-    const dx = e.touches[0].clientX - touchStart.current.x;
-    const dy = e.touches[0].clientY - touchStart.current.y;
-    if (Math.abs(dx) > Math.abs(dy) && swipeRef.current) {
-      swipeDX.current = dx;
-      if (swipeRaf.current) return;
-      swipeRaf.current = requestAnimationFrame(() => {
-        swipeRaf.current = 0;
-        const latestDX = swipeDX.current;
-        if (!swipeRef.current) return;
-        swipeRef.current.style.transform = `translate3d(${latestDX}px,0,0) rotate(${latestDX * 0.015}deg)`;
-        swipeRef.current.style.opacity = String(1 - Math.min(Math.abs(latestDX) / 500, 0.28));
-      });
-    }
-  };
-  const onTouchEnd = () => {
-    const dx = swipeDX.current;
-    swipeDX.current = 0;
-    touchStart.current = null;
-    if (swipeRaf.current) {
-      cancelAnimationFrame(swipeRaf.current);
-      swipeRaf.current = 0;
-    }
-    if (swipeRef.current) {
-      swipeRef.current.style.transition = "transform 0.24s cubic-bezier(0.22,1,0.36,1), opacity 0.18s ease";
-      swipeRef.current.style.transform = "";
-      swipeRef.current.style.opacity = "1";
-    }
-    if (dx <= -60) next();
-    else if (dx >= 60) prev();
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success("Song link copied to clipboard");
   };
 
   return (
-    <div className={cn(
-      "now-playing-sheet fixed inset-0 z-[100] bg-gradient-to-b from-background/95 via-card/95 to-background text-foreground flex flex-col overflow-hidden backdrop-blur-2xl",
-      closing ? "now-playing-sheet-out" : "now-playing-sheet-in",
-    )}>
-      <MoodBackdrop intensity={0.9} />
-      {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-3 shrink-0 border-b border-border/40 bg-background/40 backdrop-blur-md">
-        <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full" onClick={closeNowPlaying}>
-          <ChevronDown className="h-6 w-6" />
-        </Button>
-        <div className="text-center min-w-0 px-2">
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Now Playing</div>
-          <div className="text-sm font-bold truncate text-foreground">{song.album || song.artist}</div>
+    <div
+      className={cn(
+        "fixed inset-0 pb-20 md:pb-24 z-30 bg-background/95 md:bg-background/98 text-foreground flex flex-col overflow-y-auto backdrop-blur-2xl transition-all duration-300 select-none",
+        closing
+          ? "opacity-0 translate-y-4 scale-[0.99] pointer-events-none ease-in"
+          : "opacity-100 translate-y-0 scale-100 ease-out animate-in fade-in zoom-in-95"
+      )}
+    >
+      <MoodBackdrop intensity={0.85} />
+
+      {/* TOP HEADER: Spotify Breadcrumb & Actions */}
+      <div className="relative z-10 flex items-center justify-between px-6 py-4 shrink-0 border-b border-border/40 bg-background/30 backdrop-blur-md">
+        <div className="min-w-0 pr-4">
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
+            Playing from
+          </div>
+          <div className="text-sm font-extrabold truncate text-foreground">
+            {song.album || "Library Tracks"}
+          </div>
         </div>
-        <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full" onClick={() => setShowQueue((s) => !s)}>
-          {showQueue ? <MoreHorizontal className="h-6 w-6" /> : <ListMusic className="h-6 w-6" />}
-        </Button>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full h-9 w-9 cursor-pointer"
+            onClick={handleShare}
+            title="Share track"
+          >
+            <Share2 className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full h-9 w-9 cursor-pointer"
+            onClick={toggleQueuePanel}
+            title="Queue"
+          >
+            <ListMusic className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-foreground hover:bg-accent/60 rounded-full h-9 w-9 cursor-pointer"
+            onClick={closeNowPlaying}
+            title="Collapse view"
+          >
+            <ChevronDown className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-        {/* Artwork + controls */}
-        <div className={cn("flex-1 flex flex-col items-center justify-center px-6 pb-6 min-h-0", showQueue && "hidden md:flex")}>
-          <div
-            ref={swipeRef}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            style={{ willChange: "transform" }}
-            className="w-full max-w-md aspect-square rounded-2xl overflow-hidden bg-muted/60 shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-border/60 flex items-center justify-center touch-pan-y select-none transition-shadow group"
-          >
+      {/* CENTER STAGE: Spotify Large Artwork & Cards (NO DUPLICATE PLAY CONTROLS) */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 min-h-0">
+        <div className="w-full max-w-2xl flex flex-col items-center">
+          {/* Large Spotify Album Cover */}
+          <div className="w-72 h-72 sm:w-88 sm:h-88 md:w-[380px] md:h-[380px] lg:w-[400px] lg:h-[400px] rounded-2xl md:rounded-3xl overflow-hidden bg-muted/60 shadow-[0_24px_60px_rgba(0,0,0,0.18)] border border-border/60 flex items-center justify-center transition-transform duration-500 hover:scale-[1.01] group relative">
             {song.thumbnail_url ? (
               <img
                 key={song.id}
                 src={song.thumbnail_url}
-                alt=""
+                alt={song.title}
                 draggable={false}
-                className="h-full w-full object-cover animate-fade-in group-hover:scale-105 transition-transform duration-700 ease-out"
+                className="h-full w-full object-cover transition-transform duration-700 ease-out"
               />
             ) : (
-              <Music className="h-24 w-24 text-muted-foreground/40" />
+              <Music className="h-28 w-28 text-muted-foreground/30" />
             )}
           </div>
 
-          <div className="w-full max-w-md mt-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-2xl md:text-3xl font-extrabold tracking-tight truncate text-foreground">{song.title}</div>
-                <div className="text-base font-medium text-muted-foreground truncate mt-0.5">{song.artist}</div>
-              </div>
-              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 rounded-full shrink-0" onClick={() => toggleLike.mutate()}>
-                <Heart className={cn("h-6 w-6 transition-colors", isLiked ? "fill-primary text-primary" : "text-muted-foreground")} />
-              </Button>
+          {/* Song Title, Artist, & Like Button */}
+          <div className="w-full flex items-center justify-between gap-4 mt-6 px-1">
+            <div className="min-w-0">
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground truncate">
+                {cleanSongTitle(song.title)}
+              </h2>
+              <p className="text-sm sm:text-base font-medium text-muted-foreground truncate mt-1">
+                {song.artist}
+              </p>
             </div>
-
-            <div className="space-y-1.5">
-              <Slider
-                value={[scrubbing ? scrubValue : progress]}
-                max={duration || 1}
-                step={0.01}
-                onPointerDown={seekTouchHaptic}
-                onValueChange={(v) => { setScrubbing(true); setScrubValue(v[0]); seekDragHaptic(v[0]); }}
-                onValueCommit={(v) => { seek(v[0]); seekCommitHaptic(); setScrubbing(false); }}
-              />
-              <div className="flex justify-between text-xs font-medium text-muted-foreground tabular-nums">
-                <span>{formatDuration(scrubbing ? scrubValue : progress)}</span>
-                <span>{formatDuration(duration)}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full" onClick={toggleShuffle}>
-                <Shuffle className={shuffle ? "h-5 w-5 text-primary" : "h-5 w-5"} />
-              </Button>
-              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 h-12 w-12 rounded-full" onClick={prev}>
-                <SkipBack className="h-7 w-7 fill-current" />
-              </Button>
-              <Button
-                size="icon"
-                className="h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-transform"
-                onClick={togglePlay}
-              >
-                {isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 fill-current ml-1" />}
-              </Button>
-              <Button size="icon" variant="ghost" className="text-foreground hover:bg-accent/60 h-12 w-12 rounded-full" onClick={next}>
-                <SkipForward className="h-7 w-7 fill-current" />
-              </Button>
-              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full" onClick={cycleRepeat}>
-                {repeat === "one" ? (
-                  <Repeat1 className="h-5 w-5 text-primary" />
-                ) : (
-                  <Repeat className={repeat === "all" ? "h-5 w-5 text-primary" : "h-5 w-5"} />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="text-foreground hover:bg-accent/60 rounded-full h-10 w-10 shrink-0 cursor-pointer"
+              onClick={() => toggleLike.mutate()}
+            >
+              <Heart
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  isLiked ? "fill-primary text-primary" : "text-muted-foreground"
                 )}
-              </Button>
+              />
+            </Button>
+          </div>
+
+          {/* SPOTIFY DUAL CARDS (Credits on left, Next in queue on right) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6">
+            {/* Left Card: Credits */}
+            <div className="bg-card/70 border border-border/70 rounded-2xl p-4 backdrop-blur-md shadow-xs flex flex-col justify-between space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">Credits</span>
+                <button
+                  onClick={() => setShowCreditsModal(true)}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                >
+                  Show all
+                </button>
+              </div>
+              <div className="space-y-1">
+                <div className="font-bold text-sm text-foreground truncate">
+                  {song.artist}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Main Artist • Performer
+                </div>
+              </div>
+              {song.album && (
+                <div className="text-xs text-muted-foreground/80 truncate pt-1 border-t border-border/40">
+                  Album: <span className="text-foreground font-medium">{song.album}</span>
+                </div>
+              )}
             </div>
 
-            <div className="hidden md:flex items-center gap-2 pt-2">
-              <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent/60 h-8 w-8 rounded-full" onClick={toggleMute}>
-                {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              </Button>
-              <Slider
-                value={[muted ? 0 : volume * 100]}
-                max={100}
-                step={1}
-                onValueChange={(v) => setVolume(v[0] / 100)}
-                className="flex-1"
-              />
+            {/* Right Card: Next in Queue */}
+            <div className="bg-card/70 border border-border/70 rounded-2xl p-4 backdrop-blur-md shadow-xs flex flex-col justify-between space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">Next in queue</span>
+                <button
+                  onClick={toggleQueuePanel}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                >
+                  Open queue
+                </button>
+              </div>
+
+              {nextSong ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-lg bg-muted shrink-0 overflow-hidden border border-border/50">
+                    {nextSong.thumbnail_url ? (
+                      <img
+                        src={nextSong.thumbnail_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Music className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold truncate text-foreground">
+                      {cleanSongTitle(nextSong.title)}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {nextSong.artist}
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 rounded-full text-foreground hover:bg-accent/80 shrink-0 cursor-pointer"
+                    onClick={() => next()}
+                    title="Skip to next"
+                  >
+                    <Play className="h-4 w-4 fill-current ml-0.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground py-2">
+                  No more tracks queued up.
+                </div>
+              )}
             </div>
           </div>
         </div>
-
-        {/* Queue panel */}
-        {showQueue && (
-          <div className="md:w-96 md:border-l border-border/60 overflow-y-auto px-4 pb-6 bg-card/60 backdrop-blur-xl">
-            <h3 className="font-bold text-lg sticky top-0 bg-card/95 backdrop-blur-md py-3.5 border-b border-border/50 text-foreground z-10">Next up</h3>
-            <div className="space-y-1.5 pt-2">
-              {queue.map((s, i) => (
-                <button
-                  key={s.id + i}
-                  onClick={() => usePlayer.setState({ currentIndex: i, isPlaying: true, progress: 0, duration: s.duration ?? 0 })}
-                  className={cn(
-                    "w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/60 text-left transition-colors border border-transparent",
-                    i === currentIndex && "bg-primary/10 border-primary/20"
-                  )}
-                >
-                  <div className="h-11 w-11 rounded-lg bg-muted shrink-0 overflow-hidden border border-border/40">
-                    {s.thumbnail_url && <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className={cn("text-sm truncate text-foreground", i === currentIndex && "text-primary font-bold")}>{s.title}</div>
-                    <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Credits Dialog */}
+      <Dialog open={showCreditsModal} onOpenChange={setShowCreditsModal}>
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold tracking-tight">Credits</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Song Title</div>
+              <div className="text-base font-bold text-foreground mt-0.5">{cleanSongTitle(song.title)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Main Artist / Performer</div>
+              <div className="text-base font-medium text-foreground mt-0.5">{song.artist}</div>
+            </div>
+            {song.album && (
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Album</div>
+                <div className="text-sm font-medium text-foreground mt-0.5">{song.album}</div>
+              </div>
+            )}
+            {song.genre && (
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Genre</div>
+                <div className="text-sm font-medium text-foreground mt-0.5">{song.genre}</div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -11,6 +11,19 @@ import { formatDuration } from "@/lib/owner";
 import { getR2UploadUrl, deleteR2Object, extractR2Metadata } from "@/lib/r2-upload.functions";
 import { parseBlob } from "music-metadata";
 import { useAuth } from "@/lib/auth-hook";
+import { cleanSongTitle } from "@/lib/song-utils";
+import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Sonara — Admin Dashboard" }] }),
@@ -35,25 +48,21 @@ function AdminPage() {
   });
   if (loading || roleLoading) {
     return (
-      <Layout>
-        <div className="p-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-      </Layout>
+      <div className="p-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
     );
   }
   if (!isAdmin) {
     return (
-      <Layout>
-        <div className="p-10 max-w-md mx-auto text-center space-y-2">
-          <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto" />
-          <h1 className="text-xl font-bold">Admin access required</h1>
-          <p className="text-sm text-muted-foreground">
-            Your account doesn't have the <code>admin</code> role. Ask an existing admin to grant it via the <code>user_roles</code> table.
-          </p>
-        </div>
-      </Layout>
+      <div className="p-10 max-w-md mx-auto text-center space-y-2">
+        <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto" />
+        <h1 className="text-xl font-bold">Admin access required</h1>
+        <p className="text-sm text-muted-foreground">
+          Your account doesn't have the <code>admin</code> role. Ask an existing admin to grant it via the <code>user_roles</code> table.
+        </p>
+      </div>
     );
   }
-  return <Layout><AdminPanel /></Layout>;
+  return <AdminPanel />;
 }
 
 type QueueStatus = "pending" | "parsing" | "ready" | "duplicate" | "uploading" | "done" | "error";
@@ -79,6 +88,12 @@ function AdminPanel() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{
+    current: number;
+    total: number;
+    pct: number;
+    title: string;
+  } | null>(null);
 
   const getUploadUrl = useServerFn(getR2UploadUrl);
   const deleteObj = useServerFn(deleteR2Object);
@@ -128,7 +143,8 @@ function AdminPanel() {
         thumbBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format || "image/jpeg" });
         thumbDataUrl = URL.createObjectURL(thumbBlob);
       }
-      const title = c.title || item.file.name.replace(/\.[^.]+$/, "");
+      const rawTitle = c.title || item.file.name.replace(/\.[^.]+$/, "");
+      const title = cleanSongTitle(rawTitle);
       const artist = c.artist || c.albumartist || "Unknown Artist";
       updateItem(item.id, {
         title,
@@ -149,7 +165,7 @@ function AdminPanel() {
         a.addEventListener("error", () => resolve(0));
       });
       updateItem(item.id, {
-        title: item.file.name.replace(/\.[^.]+$/, ""),
+        title: cleanSongTitle(item.file.name.replace(/\.[^.]+$/, "")),
         artist: "Unknown Artist",
         duration: dur,
         status: "ready",
@@ -238,8 +254,10 @@ function AdminPanel() {
       }
       const duration =
         item.duration > 0 ? item.duration : serverMeta?.duration && serverMeta.duration > 0 ? serverMeta.duration : 0;
+      const rawTitle = item.title || serverMeta?.title || item.file.name.replace(/\.[^.]+$/, "");
+      const finalTitle = cleanSongTitle(rawTitle);
       const { error } = await supabase.from("songs").insert({
-        title: item.title || serverMeta?.title || item.file.name.replace(/\.[^.]+$/, ""),
+        title: finalTitle,
         artist: item.artist || serverMeta?.artist || "Unknown Artist",
         album: item.album || serverMeta?.album || null,
         genre: item.genre || serverMeta?.genre || null,
@@ -255,11 +273,15 @@ function AdminPanel() {
   };
 
   const uploadAll = async () => {
+    const snapshot = queue.filter((it) => it.status === "ready" || it.status === "error");
+    if (!snapshot.length) return;
+
     setBulkRunning(true);
+    setBulkProgress({ current: 0, total: snapshot.length, pct: 0, title: "" });
     try {
       // Sequential to be gentle on R2 / bandwidth. Duplicates are skipped — user must explicitly override.
-      const snapshot = queue.filter((it) => it.status === "ready" || it.status === "error");
-      for (const it of snapshot) {
+      for (let i = 0; i < snapshot.length; i++) {
+        const it = snapshot[i];
         // re-read latest from state via closure-safe lookup
         const latest = (await new Promise<QueueItem | undefined>((res) => {
           setQueue((q) => {
@@ -268,16 +290,33 @@ function AdminPanel() {
           });
         }));
         if (!latest) continue;
+
+        const currentNum = i + 1;
+        const pct = Math.round((i / snapshot.length) * 100);
+        setBulkProgress({
+          current: currentNum,
+          total: snapshot.length,
+          pct,
+          title: latest.title || latest.file.name,
+        });
+
         if (!latest.title || !latest.artist) {
           updateItem(latest.id, { status: "error", error: "Title and artist required" });
           continue;
         }
         await uploadOne(latest);
       }
+      setBulkProgress({
+        current: snapshot.length,
+        total: snapshot.length,
+        pct: 100,
+        title: "All tracks uploaded",
+      });
       qc.invalidateQueries({ queryKey: ["songs"] });
-      toast.success("Bulk upload finished");
+      toast.success(`Completed upload of ${snapshot.length} tracks.`);
     } finally {
       setBulkRunning(false);
+      setTimeout(() => setBulkProgress(null), 3500);
     }
   };
 
@@ -292,7 +331,10 @@ function AdminPanel() {
       }
       await supabase.from("songs").delete().eq("id", s.id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["songs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["songs"] });
+      toast.success("Song removed from library");
+    },
   });
 
   const readyCount = queue.filter((q) => q.status === "ready" || q.status === "error").length;
@@ -347,6 +389,23 @@ function AdminPanel() {
                   {bulkRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                   {bulkRunning ? "Uploading…" : `Upload all (${readyCount})`}
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {bulkProgress && (
+            <div className="bg-card/90 border border-primary/40 rounded-xl p-4 space-y-2 shadow-sm animate-fade-in">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-foreground">
+                  Uploading track {bulkProgress.current} of {bulkProgress.total}: &ldquo;{cleanSongTitle(bulkProgress.title)}&rdquo;
+                </span>
+                <span className="text-primary font-bold tabular-nums">{bulkProgress.pct}%</span>
+              </div>
+              <div className="relative w-full h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-500 transition-all duration-300 rounded-full"
+                  style={{ width: `${bulkProgress.pct}%` }}
+                />
               </div>
             </div>
           )}
@@ -416,7 +475,7 @@ function AdminPanel() {
           </div>
 
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">⚠️ R2 bucket needs CORS configured (one-time)</summary>
+            <summary className="cursor-pointer">Cloudflare R2 bucket CORS configuration reference</summary>
             <pre className="mt-2 p-3 bg-background rounded overflow-auto">{`[
   {
     "AllowedOrigins": ["*"],
@@ -439,13 +498,34 @@ function AdminPanel() {
                 {s.thumbnail_url ? <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" /> : <Music className="h-4 w-4 text-muted-foreground" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{s.title}</div>
+                <div className="font-medium truncate">{cleanSongTitle(s.title)}</div>
                 <div className="text-xs text-muted-foreground truncate">{s.artist} · {s.album || "—"} · {s.genre || "—"}</div>
               </div>
               <div className="text-xs text-muted-foreground">{formatDuration(s.duration)}</div>
-              <Button size="icon" variant="ghost" onClick={() => del.mutate(s)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive cursor-pointer">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Song</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete &ldquo;{cleanSongTitle(s.title)}&rdquo;? This will permanently remove the song from your library and delete its audio file from R2 storage.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => del.mutate(s)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           ))}
           {!songs.length && <div className="p-6 text-muted-foreground text-center">No songs yet.</div>}

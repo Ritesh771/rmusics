@@ -11,9 +11,6 @@ import {
 
 import appCss from "../styles.css?url";
 import { Layout } from "@/components/Layout";
-import { Player } from "@/components/Player";
-import { NowPlaying } from "@/components/NowPlaying";
-import { QueuePanel } from "@/components/QueuePanel";
 import { Toaster } from "@/components/ui/sonner";
 import { usePersistentQueue } from "@/lib/use-persistent-queue";
 import { useAuth } from "@/lib/auth-hook";
@@ -54,6 +51,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {error?.message && (
+          <pre className="text-xs text-destructive font-mono mt-3 p-3 rounded-lg bg-destructive/10 text-left max-h-28 overflow-auto whitespace-pre-wrap break-all">
+            {error.message}
+          </pre>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -198,9 +200,6 @@ function RootInner() {
   return (
     <Layout>
       <Outlet />
-      <Player />
-      <NowPlaying />
-      <QueuePanel />
       <Toaster theme={theme} />
     </Layout>
   );

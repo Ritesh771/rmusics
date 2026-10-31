@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LikedRouteImport } from './routes/liked'
@@ -24,6 +25,11 @@ import { Route as ApiStreamRouteImport } from './routes/api/stream'
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/liked'
     | '/login'
     | '/search'
+    | '/settings'
     | '/sitemap.xml'
     | '/api/stream'
     | '/playlist/$id'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/liked'
     | '/login'
     | '/search'
+    | '/settings'
     | '/sitemap.xml'
     | '/api/stream'
     | '/playlist/$id'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/liked'
     | '/login'
     | '/search'
+    | '/settings'
     | '/sitemap.xml'
     | '/api/stream'
     | '/playlist/$id'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   LikedRoute: typeof LikedRoute
   LoginRoute: typeof LoginRoute
   SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiStreamRoute: typeof ApiStreamRoute
   PlaylistIdRoute: typeof PlaylistIdRoute
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   LikedRoute: LikedRoute,
   LoginRoute: LoginRoute,
   SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiStreamRoute: ApiStreamRoute,
   PlaylistIdRoute: PlaylistIdRoute,

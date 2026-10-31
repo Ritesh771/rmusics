@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Music, Heart, Search as SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-hook";
+import { LibrarySkeleton } from "@/components/Skeletons";
 
 export const Route = createFileRoute("/library")({
   head: () => ({ meta: [{ title: "Sonara — Library" }] }),
@@ -14,24 +15,30 @@ export const Route = createFileRoute("/library")({
 function LibraryPage() {
   const { user } = useAuth();
   const [q, setQ] = useState("");
-  const { data: playlists = [] } = useQuery({
+  const { data: playlists = [], isLoading: playlistsLoading } = useQuery({
     queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("playlists").select("*").eq("user_id", user!.id).order("updated_at", { ascending: false });
+      const { data } = await supabase
+        .from("playlists")
+        .select("*, playlist_songs(position, songs(thumbnail_url))")
+        .eq("user_id", user!.id)
+        .order("updated_at", { ascending: false });
       return data ?? [];
     },
     enabled: !!user,
+    staleTime: 1000 * 30,
   });
   const { data: featured = [] } = useQuery({
     queryKey: ["playlists", "featured"],
     queryFn: async () => {
       const { data } = await supabase
         .from("playlists")
-        .select("*")
+        .select("*, playlist_songs(position, songs(thumbnail_url))")
         .eq("is_featured", true)
         .order("created_at", { ascending: true });
       return data ?? [];
     },
+    staleTime: 1000 * 60,
   });
 
   const term = q.trim().toLowerCase();
@@ -51,6 +58,10 @@ function LibraryPage() {
     );
   }, [merged, term]);
   const showLiked = !term || "liked songs".includes(term);
+
+  if (playlistsLoading && playlists.length === 0) {
+    return <LibrarySkeleton />;
+  }
 
   return (
     <div className="p-6">
@@ -76,19 +87,31 @@ function LibraryPage() {
             <div className="text-xs text-muted-foreground">Playlist</div>
           </Link>
           )}
-          {filtered.map((p) => (
-            <Link key={p.id} to="/playlist/$id" params={{ id: p.id }} className="block bg-card p-4 rounded-md hover:bg-accent hover:scale-[1.02] transition-all duration-200 animate-fade-in">
-              <div className="aspect-square bg-muted rounded mb-3 overflow-hidden flex items-center justify-center">
-                {p.cover_url ? (
-                  <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <Music className="h-10 w-10 text-muted-foreground" />
-                )}
-              </div>
-              <div className="font-semibold truncate">{p.name}</div>
-              <div className="text-xs text-muted-foreground truncate">{p.description || "Playlist"}</div>
-            </Link>
-          ))}
+          {filtered.map((p: any) => {
+            const firstSongThumb = p.playlist_songs?.find((ps: any) => ps?.songs?.thumbnail_url)?.songs?.thumbnail_url;
+            const cover = p.cover_url || firstSongThumb;
+            return (
+              <Link key={p.id} to="/playlist/$id" params={{ id: p.id }} className="block bg-card p-4 rounded-md hover:bg-accent hover:scale-[1.02] transition-all duration-200 animate-fade-in group">
+                <div className="aspect-square bg-muted rounded mb-3 overflow-hidden flex items-center justify-center">
+                  {cover ? (
+                    <img
+                      src={cover}
+                      alt={p.name}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      loading="eager"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <Music className="h-10 w-10 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="font-semibold truncate">{p.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{p.description || "Playlist"}</div>
+              </Link>
+            );
+          })}
           {term && filtered.length === 0 && !showLiked && (
             <div className="col-span-full text-sm text-muted-foreground">No playlists match "{q}"</div>
           )}

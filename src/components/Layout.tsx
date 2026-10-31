@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 import { Sidebar } from "./Sidebar";
-import { ProfileMenu } from "./ProfileMenu";
+import { TopNavbar } from "./TopNavbar";
+import { NowPlayingSidebar } from "./NowPlayingSidebar";
+import { NowPlaying } from "./NowPlaying";
+import { QueuePanel } from "./QueuePanel";
+import { Player } from "./Player";
+import { AppShellSkeleton } from "./Skeletons";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Home, Search, Library, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
-import { Loader2 } from "lucide-react";
 import { MoodBackdrop } from "./MoodBackdrop";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -39,16 +43,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [qc]);
 
   useEffect(() => {
-    if (!loading && !user) nav({ to: "/login" });
-  }, [loading, user, nav]);
-
-  if (loading || !user) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+    if (!loading && !user && pathname !== "/login") {
+      nav({ to: "/login" });
+    }
+  }, [loading, user, pathname, nav]);
 
   const mobileNav = [
     { to: "/", icon: Home, label: "Home" },
@@ -60,15 +58,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden relative">
       <MoodBackdrop intensity={0.7} />
-      <div className="flex-1 flex min-h-0 relative z-10">
+
+      {/* TOP SPOTIFY-STYLE NAVBAR */}
+      <TopNavbar />
+
+      {/* 3-COLUMN WORKSPACE: LEFT SIDEBAR + CENTER MAIN OUTLET + RIGHT NOW PLAYING PANEL */}
+      <div className="flex-1 flex min-h-0 relative z-10 px-2 pb-2 gap-2 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 bg-gradient-to-b from-card to-background rounded-lg m-0 md:m-2 md:ml-0 overflow-y-auto pb-36 md:pb-24">
-          <div className="flex justify-end items-center gap-2 p-3 md:p-4 sticky top-0 z-30 bg-gradient-to-b from-background/80 to-transparent backdrop-blur">
-            <ProfileMenu />
-          </div>
-          {children}
+
+        <main
+          id="main-content"
+          className="flex-1 bg-card/85 backdrop-blur-xl border border-border/70 rounded-2xl overflow-y-auto pb-28 md:pb-24 shadow-xs"
+        >
+          {loading || !user ? (
+            <>
+              <AppShellSkeleton />
+              <div className="hidden">{children}</div>
+            </>
+          ) : (
+            children
+          )}
         </main>
+
+        <NowPlayingSidebar />
       </div>
+
+      {/* FULLSCREEN NOW PLAYING OVERLAY (Outside main container to avoid transform/blur containment) */}
+      <NowPlaying />
+
+      {/* QUEUE DRAWER */}
+      <QueuePanel />
+
+      {/* BOTTOM FIXED FULL PLAYER */}
+      <Player />
+
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur border-t border-border flex justify-around items-center z-50">
         {mobileNav.map((it) => (

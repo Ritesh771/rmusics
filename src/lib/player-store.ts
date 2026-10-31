@@ -40,12 +40,16 @@ type PlayerState = {
   sleepTimer: number | null; // ms epoch when stop
   nowPlayingOpen: boolean;
   queuePanelOpen: boolean;
+  sidebarRightOpen: boolean;
   openNowPlaying: () => void;
   closeNowPlaying: () => void;
   toggleNowPlaying: () => void;
   openQueuePanel: () => void;
   closeQueuePanel: () => void;
   toggleQueuePanel: () => void;
+  openSidebarRight: () => void;
+  closeSidebarRight: () => void;
+  toggleSidebarRight: () => void;
   playQueue: (songs: Song[], startIndex?: number) => void;
   playSong: (song: Song) => void;
   togglePlay: () => void;
@@ -111,12 +115,16 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   _seekTarget: null,
   nowPlayingOpen: false,
   queuePanelOpen: false,
+  sidebarRightOpen: true,
   openNowPlaying: () => set({ nowPlayingOpen: true }),
   closeNowPlaying: () => set({ nowPlayingOpen: false }),
   toggleNowPlaying: () => set((s) => ({ nowPlayingOpen: !s.nowPlayingOpen })),
   openQueuePanel: () => set({ queuePanelOpen: true }),
   closeQueuePanel: () => set({ queuePanelOpen: false }),
   toggleQueuePanel: () => set((s) => ({ queuePanelOpen: !s.queuePanelOpen })),
+  openSidebarRight: () => set({ sidebarRightOpen: true }),
+  closeSidebarRight: () => set({ sidebarRightOpen: false }),
+  toggleSidebarRight: () => set((s) => ({ sidebarRightOpen: !s.sidebarRightOpen })),
   currentSong: () => {
     const { queue, currentIndex } = get();
     return queue[currentIndex] ?? null;

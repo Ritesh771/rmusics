@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SongRow } from "@/components/SongRow";
+import { PlaylistSkeleton } from "@/components/Skeletons";
 import { Music, Play, Pencil, Trash2, Share2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,17 @@ import { usePlayer, type Song } from "@/lib/player-store";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/playlist/$id")({
@@ -101,7 +113,7 @@ function PlaylistPage() {
       qc.invalidateQueries({ queryKey: ["playlist", id] });
       qc.invalidateQueries({ queryKey: ["playlists"] });
       setEditOpen(false);
-      toast.success("Playlist updated");
+      toast.success("Playlist details updated");
     },
   });
 
@@ -111,12 +123,12 @@ function PlaylistPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["playlists"] });
-      toast.success("Playlist deleted");
+      toast.success("Playlist deleted successfully");
       nav({ to: "/library" });
     },
   });
 
-  if (!playlist) return <div className="p-6">Loading…</div>;
+  if (!playlist) return <PlaylistSkeleton />;
 
   return (
     <>
@@ -163,9 +175,30 @@ function PlaylistPage() {
             <Download className="h-5 w-5" />
             {downloading ? `Downloading ${dlProgress}%` : "Download all"}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => {
-            if (confirm("Delete this playlist?")) del.mutate();
-          }}><Trash2 className="h-5 w-5" /></Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" title="Delete playlist" className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Playlist</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete &ldquo;{playlist.name}&rdquo;? This action will remove the playlist from your library.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => del.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
         <div className="space-y-1">
           {songs.map((s, i) => (

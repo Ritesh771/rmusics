@@ -3,12 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SongRow } from "@/components/SongRow";
 import { SongMenu } from "@/components/SongMenu";
+import { HomeSkeleton } from "@/components/Skeletons";
 import type { Song } from "@/lib/player-store";
 import { usePlayer } from "@/lib/player-store";
 import { Play, Music, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-hook";
+import { cleanSongTitle } from "@/lib/song-utils";
 
 function greeting() {
   const h = new Date().getHours();
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const { user } = useAuth();
-  const { data: songs = [] } = useQuery({
+  const { data: songs = [], isLoading: songsLoading } = useQuery({
     queryKey: ["songs"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -44,6 +46,7 @@ function HomePage() {
       if (error) throw error;
       return data as Song[];
     },
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: playlists = [] } = useQuery({
@@ -53,6 +56,7 @@ function HomePage() {
       return data ?? [];
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: featured = [] } = useQuery({
@@ -65,14 +69,39 @@ function HomePage() {
         .order("created_at", { ascending: true });
       return data ?? [];
     },
+    staleTime: 1000 * 60 * 10,
   });
 
   const playQueue = usePlayer((s) => s.playQueue);
   const recent = songs.slice(0, 8);
   const byGenre: Record<string, Song[]> = {};
   for (const s of songs) {
-    const g = s.genre || "Other";
+    const g = s.genre || "Kannada";
     (byGenre[g] ||= []).push(s);
+  }
+
+  const GENRE_LABELS: Record<string, string> = {
+    Kannada: "Kannada Blockbusters & Hits",
+    Tamil: "Tamil Hits & Soundtracks",
+    Hindi: "Bollywood & Hindi Hits",
+    Telugu: "Telugu Hits & Melodies",
+    "Pop & Indie": "Pop & Indie Hits",
+    Malayalam: "Malayalam Chartbusters",
+    "Chill & Lo-Fi": "Chill & Lo-Fi Vibes",
+  };
+
+  const preferredOrder = ["Kannada", "Tamil", "Hindi", "Telugu", "Pop & Indie", "Malayalam", "Chill & Lo-Fi"];
+  const sortedGenreEntries = Object.entries(byGenre).sort(([a], [b]) => {
+    const ia = preferredOrder.indexOf(a);
+    const ib = preferredOrder.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  if (songsLoading && songs.length === 0) {
+    return <HomeSkeleton />;
   }
 
   return (
@@ -95,7 +124,7 @@ function HomePage() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 font-semibold truncate pr-2">{s.title}</div>
+                <div className="flex-1 font-semibold truncate pr-2">{cleanSongTitle(s.title)}</div>
                 </button>
                 <SongMenu
                   song={s}
@@ -154,13 +183,13 @@ function HomePage() {
           </Section>
         )}
 
-        {Object.entries(byGenre).map(([genre, list]) => (
-          <Section key={genre} title={genre}>
+        {sortedGenreEntries.map(([genre, list]) => (
+          <Section key={genre} title={GENRE_LABELS[genre] || `${genre} Hits`}>
             {list.slice(0, 6).map((s) => (
               <div key={s.id} className="relative bg-card p-4 rounded-md hover:bg-accent transition group">
                 <button
                   onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
-                  className="block text-left w-full"
+                  className="block text-left w-full cursor-pointer"
                 >
                 <div className="aspect-square bg-muted rounded mb-3 overflow-hidden relative">
                   {s.thumbnail_url ? (
@@ -174,7 +203,7 @@ function HomePage() {
                     <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
                   </div>
                 </div>
-                <div className="font-semibold truncate">{s.title}</div>
+                <div className="font-semibold truncate">{cleanSongTitle(s.title)}</div>
                 <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
                 </button>
                 <div className="absolute top-2 right-2">

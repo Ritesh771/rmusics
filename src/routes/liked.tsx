@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SongRow } from "@/components/SongRow";
+import { PlaylistSkeleton } from "@/components/Skeletons";
 import { Heart, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePlayer, type Song } from "@/lib/player-store";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/liked")({
 function LikedPage() {
   const { user } = useAuth();
   const playQueue = usePlayer((s) => s.playQueue);
-  const { data: songs = [] } = useQuery({
+  const { data: songs = [], isLoading } = useQuery({
     queryKey: ["liked", "songs", user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -25,7 +26,12 @@ function LikedPage() {
       return (data ?? []).map((r: any) => r.songs as Song).filter(Boolean);
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
+
+  if (isLoading && songs.length === 0) {
+    return <PlaylistSkeleton />;
+  }
 
   return (
     <>

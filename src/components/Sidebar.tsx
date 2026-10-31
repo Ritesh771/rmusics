@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Search, Library, Heart, Plus, Shield, Music, Clock } from "lucide-react";
+import { Home, Search, Library, Heart, Plus, Shield, Music, Clock, Settings } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-hook";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePlayer } from "@/lib/player-store";
 
 function SpotifyIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -18,19 +19,26 @@ export function Sidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const qc = useQueryClient();
   const { user } = useAuth();
+  const closeNowPlaying = usePlayer((s) => s.closeNowPlaying);
 
   const { data: playlists = [] } = useQuery({
     queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("playlists")
-        .select("*")
-        .eq("user_id", user!.id)
+        .select("*, playlist_songs(position, songs(thumbnail_url))")
         .order("updated_at", { ascending: false });
+      if (user?.id) {
+        q = q.or(`user_id.eq.${user.id},is_public.eq.true`);
+      } else {
+        q = q.eq("is_public", true);
+      }
+      const { data, error } = await q;
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
-    enabled: !!user,
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: true,
   });
 
   const createPlaylist = useMutation({
@@ -53,24 +61,12 @@ export function Sidebar() {
     { to: "/library", icon: Library, label: "Library" },
     { to: "/history", icon: Clock, label: "Recently played" },
     { to: "/import", icon: SpotifyIcon, label: "Import from Spotify" },
+    { to: "/settings", icon: Settings, label: "Settings" },
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 shrink-0 gap-2 p-2 h-full">
-      <div className="bg-card rounded-lg p-4">
-        <Link to="/" className="flex items-center gap-3 mb-6 group">
-          <img
-            src="/sonara-icon.png"
-            alt="Sonara"
-            className="h-9 w-9 rounded-full object-contain shadow-md shadow-fuchsia-500/20 group-hover:scale-105 transition-transform"
-          />
-          <div>
-            <span className="font-extrabold text-xl tracking-tight leading-none block">Sonara</span>
-            <span className="text-[9px] font-semibold text-fuchsia-600 dark:text-fuchsia-400 tracking-wider uppercase block mt-0.5">
-              Beyond Boundaries
-            </span>
-          </div>
-        </Link>
+    <aside className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 gap-2 h-full pb-24 select-none">
+      <div className="bg-card/85 backdrop-blur-xl border border-border/70 rounded-2xl p-3 shadow-xs">
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => {
             const active = pathname === item.to;
@@ -78,80 +74,102 @@ export function Sidebar() {
               <Link
                 key={item.to}
                 to={item.to}
+                onClick={() => closeNowPlaying()}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                  "flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all cursor-pointer",
+                  active
+                    ? "bg-accent text-primary shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                {item.label}
+                <item.icon className="h-5 w-5 shrink-0" />
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
       </div>
 
-      <div className="bg-card rounded-lg p-2 flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-sm font-semibold text-muted-foreground">Your Library</span>
+      <div className="bg-card/85 backdrop-blur-xl border border-border/70 rounded-2xl p-3 flex-1 flex flex-col min-h-0 shadow-xs">
+        <div className="flex items-center justify-between px-2 py-1.5 mb-1">
+          <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+            <Library className="h-4 w-4" />
+            <span>Your Library</span>
+          </div>
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-7 w-7 rounded-full hover:bg-accent cursor-pointer"
             onClick={() => createPlaylist.mutate()}
             title="Create playlist"
           >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
+
         <Link
           to="/liked"
+          onClick={() => closeNowPlaying()}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-            pathname === "/liked" ? "bg-accent" : "hover:bg-accent/50"
+            "flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-all cursor-pointer mb-1",
+            pathname === "/liked" ? "bg-accent text-primary font-semibold" : "hover:bg-accent/50"
           )}
         >
-          <div className="h-10 w-10 rounded bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center">
+          <div className="h-11 w-11 rounded-lg bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center shrink-0 shadow-xs">
             <Heart className="h-5 w-5 fill-white text-white" />
           </div>
-          <div>
-            <div className="font-medium">Liked Songs</div>
-            <div className="text-xs text-muted-foreground">Playlist</div>
+          <div className="truncate">
+            <div className="font-semibold text-foreground truncate">Liked Songs</div>
+            <div className="text-xs text-muted-foreground">Playlist • Auto</div>
           </div>
         </Link>
-        <div className="flex-1 overflow-y-auto mt-1">
-          {playlists.map((p) => {
+
+        <div className="flex-1 overflow-y-auto space-y-0.5 pr-1">
+          {playlists.map((p: any) => {
             const active = pathname === `/playlist/${p.id}`;
+            const firstSongThumb = p.playlist_songs?.find((ps: any) => ps?.songs?.thumbnail_url)?.songs?.thumbnail_url;
+            const cover = p.cover_url || firstSongThumb;
             return (
               <Link
                 key={p.id}
                 to="/playlist/$id"
                 params={{ id: p.id }}
+                onClick={() => closeNowPlaying()}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                  active ? "bg-accent" : "hover:bg-accent/50"
+                  "flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-all cursor-pointer group",
+                  active ? "bg-accent text-primary font-semibold" : "hover:bg-accent/50"
                 )}
               >
-                <div className="h-10 w-10 rounded bg-muted flex items-center justify-center overflow-hidden">
-                  {p.cover_url ? (
-                    <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
+                <div className="h-11 w-11 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border/50">
+                  {cover ? (
+                    <img
+                      src={cover}
+                      alt=""
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      loading="eager"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
                   ) : (
                     <Music className="h-5 w-5 text-muted-foreground" />
                   )}
                 </div>
-                <div className="truncate">
-                  <div className="font-medium truncate">{p.name}</div>
+                <div className="truncate min-w-0">
+                  <div className="font-semibold truncate text-foreground">{p.name}</div>
                   <div className="text-xs text-muted-foreground">Playlist</div>
                 </div>
               </Link>
             );
           })}
         </div>
+
         <Link
           to="/admin"
-          className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground border-t border-border mt-2 pt-3"
+          onClick={() => closeNowPlaying()}
+          className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border-t border-border/60 mt-2 pt-2.5"
         >
-          <Shield className="h-3.5 w-3.5" /> Admin
+          <Shield className="h-3.5 w-3.5" /> Admin Panel
         </Link>
       </div>
     </aside>

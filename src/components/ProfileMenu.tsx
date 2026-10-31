@@ -4,7 +4,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Library, Clock, Sparkles, Sun, Moon, Smartphone } from "lucide-react";
+import { LogOut, Palette, Sun, Moon, Smartphone, Settings } from "lucide-react";
 import { useAuth, getDisplayName, getAvatarUrl } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "@tanstack/react-router";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useTheme, toggleTheme } from "@/lib/theme-store";
 import { useShake } from "@/lib/shake-store";
+import { usePlayer } from "@/lib/player-store";
 
 export function ProfileMenu() {
   const { user } = useAuth();
@@ -57,7 +58,7 @@ export function ProfileMenu() {
           className="flex items-center justify-between gap-3"
         >
           <span className="flex items-center">
-            <Sparkles className={cn("h-4 w-4 mr-2 transition-colors", moodOn ? "text-primary" : "text-muted-foreground")} />
+            <Palette className={cn("h-4 w-4 mr-2 transition-colors", moodOn ? "text-primary" : "text-muted-foreground")} />
             Mood lights
           </span>
           <Switch checked={moodOn} onCheckedChange={() => toggleMood()} onClick={(e) => e.stopPropagation()} />
@@ -88,10 +89,10 @@ export function ProfileMenu() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/library"><Library className="h-4 w-4 mr-2" />Library</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/history"><Clock className="h-4 w-4 mr-2" />Recently played</Link>
+          <Link to="/settings" onClick={() => closeNowPlaying()} className="cursor-pointer">
+            <Settings className="h-4 w-4 mr-2" />
+            <span>Settings</span>
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
