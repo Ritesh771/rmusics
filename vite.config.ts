@@ -13,6 +13,22 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    environments: {
+      client: {
+        build: {
+          rollupOptions: {
+            input: { index: "virtual:tanstack-start-client-entry" },
+          },
+        },
+      },
+      ssr: {
+        build: {
+          rollupOptions: {
+            input: "virtual:tanstack-start-server-entry",
+          },
+        },
+      },
+    },
     plugins: [
       {
         name: "oauth-redirect-handler",
