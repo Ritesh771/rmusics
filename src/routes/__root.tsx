@@ -162,6 +162,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
             __html: `(function(){try{var t=localStorage.getItem('rmusics.theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}var r=document.documentElement;r.classList.toggle('dark',t==='dark');r.style.colorScheme=t;}catch(e){}})();`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator && location.protocol.startsWith('http')){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}`,
+          }}
+        />
       </head>
       <body className="bg-background text-foreground" suppressHydrationWarning>
         {children}

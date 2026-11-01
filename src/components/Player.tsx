@@ -28,7 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { streamUrl } from "@/lib/stream-url";
 import { useShakeVolume } from "@/lib/use-shake-volume";
 import { seekCommitHaptic, seekDragHaptic, seekTouchHaptic } from "@/lib/haptics";
-import { attachEqualizerToAudio, resumeAudioContext } from "@/lib/equalizer-store";
+import { attachEqualizerToAudio, resumeAudioContext, useEqualizer } from "@/lib/equalizer-store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
@@ -474,10 +474,14 @@ export function Player() {
       }
     };
     safe("play", () => {
+      resumeAudioContext();
       if (audioRef.current) audioRef.current.autoplay = true;
       audioRef.current
         ?.play()
-        .then(() => usePlayer.setState({ isPlaying: true }))
+        .then(() => {
+          usePlayer.setState({ isPlaying: true });
+          try { navigator.mediaSession.playbackState = "playing"; } catch {}
+        })
         .catch(() => undefined);
     });
     safe("pause", () => {
@@ -486,6 +490,7 @@ export function Player() {
         audioRef.current.pause();
       }
       usePlayer.setState({ isPlaying: false });
+      try { navigator.mediaSession.playbackState = "paused"; } catch {}
     });
     safe("previoustrack", goToPrevious);
     safe("nexttrack", advanceToNext);
@@ -555,10 +560,22 @@ export function Player() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });
 
+  // Attach equalizer only if the user explicitly enabled it
   useEffect(() => {
     if (audioRef.current) {
-      attachEqualizerToAudio(audioRef.current);
+      if (useEqualizer.getState().enabled) {
+        attachEqualizerToAudio(audioRef.current);
+      }
     }
+  }, []);
+
+  // Listen for EQ enable toggle from Settings to attach dynamically
+  useEffect(() => {
+    return useEqualizer.subscribe((state, prevState) => {
+      if (state.enabled && !prevState.enabled && audioRef.current) {
+        attachEqualizerToAudio(audioRef.current);
+      }
+    });
   }, []);
 
   return (
@@ -586,8 +603,12 @@ export function Player() {
         }}
         onPlay={() => {
           suppressPauseUntil.current = 0;
+          resumeAudioContext();
           if (audioRef.current) audioRef.current.autoplay = true;
           usePlayer.setState({ isPlaying: true });
+          if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+            try { navigator.mediaSession.playbackState = "playing"; } catch {}
+          }
         }}
         onPause={() => {
           const audio = audioRef.current;
@@ -601,6 +622,9 @@ export function Player() {
           if (Date.now() < suppressPauseUntil.current) return;
           if (audioRef.current) audioRef.current.autoplay = false;
           usePlayer.setState({ isPlaying: false });
+          if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+            try { navigator.mediaSession.playbackState = "paused"; } catch {}
+          }
         }}
         onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
         onStalled={() => {

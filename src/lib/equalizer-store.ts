@@ -126,6 +126,15 @@ export function resumeAudioContext() {
   }
 }
 
+// Re-arm AudioContext when returning from background / screen unlock if user enabled EQ
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
+  });
+}
+
 // Persist in localStorage
 const STORAGE_KEY = "sonara_eq_settings_v1";
 
@@ -135,7 +144,7 @@ function loadSavedSettings(): {
   gains: [number, number, number, number, number, number];
 } {
   if (typeof window === "undefined") {
-    return { enabled: true, preset: "Rock", gains: EQ_PRESETS.Rock };
+    return { enabled: false, preset: "Rock", gains: EQ_PRESETS.Rock };
   }
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -143,14 +152,14 @@ function loadSavedSettings(): {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed.gains) && parsed.gains.length === 6) {
         return {
-          enabled: parsed.enabled ?? true,
+          enabled: parsed.enabled ?? false,
           preset: parsed.preset ?? "Rock",
           gains: parsed.gains,
         };
       }
     }
   } catch {}
-  return { enabled: true, preset: "Rock", gains: EQ_PRESETS.Rock };
+  return { enabled: false, preset: "Rock", gains: EQ_PRESETS.Rock };
 }
 
 const initial = loadSavedSettings();
@@ -162,6 +171,9 @@ export const useEqualizer = create<EqualizerState>((set, get) => ({
 
   setEnabled: (enabled) => {
     set({ enabled });
+    if (enabled && boundAudioEl) {
+      attachEqualizerToAudio(boundAudioEl);
+    }
     applyFilterGains(get().gains, enabled);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...get(), enabled }));
