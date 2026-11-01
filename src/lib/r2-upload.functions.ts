@@ -21,7 +21,7 @@ const inputSchema = z.object({
 
 export const getR2UploadUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => inputSchema.parse(input))
+  .validator((input: any) => inputSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context as any);
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -69,7 +69,7 @@ export const getR2UploadUrl = createServerFn({ method: "POST" })
 
 export const deleteR2Object = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ key: z.string().min(1) }).parse(input))
+  .validator((input: any) => z.object({ key: z.string().min(1) }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context as any);
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -95,7 +95,7 @@ export const deleteR2Object = createServerFn({ method: "POST" })
 // merge with whatever the client extracted.
 export const extractR2Metadata = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) =>
+  .validator((input: any) =>
     z.object({ url: z.string().url() }).parse(input)
   )
   .handler(async ({ data, context }) => {

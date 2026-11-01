@@ -38,6 +38,7 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const { user } = useAuth();
+  const currentSongId = usePlayer((s) => s.queue[s.currentIndex]?.id);
   const { data: songs = [], isLoading: songsLoading } = useQuery({
     queryKey: ["songs"],
     queryFn: async () => {
@@ -109,33 +110,46 @@ function HomePage() {
         <div className="animate-fade-in">
           <h1 className="text-3xl font-bold mb-5">{greeting()}</h1>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {recent.slice(0, 6).map((s) => (
-              <div key={s.id} className="group relative flex items-center gap-3 bg-card/60 hover:bg-accent rounded-md overflow-hidden transition">
-                <button
-                  onClick={() => playQueue(recent, recent.findIndex((x) => x.id === s.id))}
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                >
-                <div className="h-16 w-16 bg-muted shrink-0 overflow-hidden">
-                  {s.thumbnail_url ? (
-                    <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                      <Music className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 font-semibold truncate pr-2">{cleanSongTitle(s.title)}</div>
-                </button>
-                <SongMenu
-                  song={s}
-                  trigger={
-                    <Button size="icon" variant="ghost" className="h-8 w-8 mr-2 shrink-0">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
+            {recent.slice(0, 6).map((s) => {
+              const isCurrent = currentSongId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={
+                    "group relative flex items-center gap-3 rounded-xl overflow-hidden transition-all border " +
+                    (isCurrent
+                      ? "bg-primary/10 border-primary/40 shadow-xs"
+                      : "bg-card/60 hover:bg-accent border-transparent")
                   }
-                />
-              </div>
-            ))}
+                >
+                  <button
+                    onClick={() => playQueue(recent, recent.findIndex((x) => x.id === s.id))}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                  <div className={"h-16 w-16 bg-muted shrink-0 overflow-hidden border-r " + (isCurrent ? "border-primary/40" : "border-border/40")}>
+                    {s.thumbnail_url ? (
+                      <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <Music className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className={"flex-1 font-semibold truncate pr-2 " + (isCurrent ? "text-primary" : "text-foreground")}>
+                    {cleanSongTitle(s.title)}
+                  </div>
+                  </button>
+                  <SongMenu
+                    song={s}
+                    trigger={
+                      <Button size="icon" variant="ghost" className="h-8 w-8 mr-2 shrink-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -185,39 +199,52 @@ function HomePage() {
 
         {sortedGenreEntries.map(([genre, list]) => (
           <Section key={genre} title={GENRE_LABELS[genre] || `${genre} Hits`}>
-            {list.slice(0, 6).map((s) => (
-              <div key={s.id} className="relative bg-card p-4 rounded-md hover:bg-accent transition group">
-                <button
-                  onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
-                  className="block text-left w-full cursor-pointer"
+            {list.slice(0, 6).map((s) => {
+              const isCurrent = currentSongId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={
+                    "relative p-4 rounded-xl transition-all group border " +
+                    (isCurrent
+                      ? "bg-primary/10 border-primary/40 shadow-xs"
+                      : "bg-card hover:bg-accent border-transparent")
+                  }
                 >
-                <div className="aspect-square bg-muted rounded mb-3 overflow-hidden relative">
-                  {s.thumbnail_url ? (
-                    <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                      <Music className="h-10 w-10 text-muted-foreground" />
+                  <button
+                    onClick={() => playQueue(list, list.findIndex((x) => x.id === s.id))}
+                    className="block text-left w-full cursor-pointer"
+                  >
+                  <div className={"aspect-square bg-muted rounded-lg mb-3 overflow-hidden relative border " + (isCurrent ? "border-primary/50" : "border-border/30")}>
+                    {s.thumbnail_url ? (
+                      <img src={s.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <Music className="h-10 w-10 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 right-2 h-10 w-10 rounded-full bg-primary opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition flex items-center justify-center shadow-lg">
+                      <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
                     </div>
-                  )}
-                  <div className="absolute bottom-2 right-2 h-10 w-10 rounded-full bg-primary opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition flex items-center justify-center shadow-lg">
-                    <Play className="h-4 w-4 fill-primary-foreground text-primary-foreground" />
+                  </div>
+                  <div className={"font-semibold truncate " + (isCurrent ? "text-primary" : "text-foreground")}>
+                    {cleanSongTitle(s.title)}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
+                  </button>
+                  <div className="absolute top-2 right-2">
+                    <SongMenu
+                      song={s}
+                      trigger={
+                        <Button size="icon" variant="ghost" className="h-8 w-8 bg-background/70 backdrop-blur hover:bg-background">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      }
+                    />
                   </div>
                 </div>
-                <div className="font-semibold truncate">{cleanSongTitle(s.title)}</div>
-                <div className="text-xs text-muted-foreground truncate">{s.artist}</div>
-                </button>
-                <div className="absolute top-2 right-2">
-                  <SongMenu
-                    song={s}
-                    trigger={
-                      <Button size="icon" variant="ghost" className="h-8 w-8 bg-background/70 backdrop-blur hover:bg-background">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    }
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </Section>
         ))}
 

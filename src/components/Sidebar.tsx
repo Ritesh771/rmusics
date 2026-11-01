@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Search, Library, Heart, Plus, Shield, Music, Clock, Settings } from "lucide-react";
+import { Home, Search, Library, Heart, Plus, Music, Clock, Settings } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-hook";
@@ -24,19 +24,16 @@ export function Sidebar() {
   const { data: playlists = [] } = useQuery({
     queryKey: ["playlists", user?.id],
     queryFn: async () => {
-      let q = supabase
+      if (!user?.id) return [];
+      const { data, error } = await supabase
         .from("playlists")
         .select("*, playlist_songs(position, songs(thumbnail_url))")
+        .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
-      if (user?.id) {
-        q = q.or(`user_id.eq.${user.id},is_public.eq.true`);
-      } else {
-        q = q.eq("is_public", true);
-      }
-      const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !!user?.id,
     staleTime: 1000 * 30,
     refetchOnWindowFocus: true,
   });
@@ -164,13 +161,20 @@ export function Sidebar() {
           })}
         </div>
 
-        <Link
-          to="/admin"
-          onClick={() => closeNowPlaying()}
-          className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border-t border-border/60 mt-2 pt-2.5"
-        >
-          <Shield className="h-3.5 w-3.5" /> Admin Panel
-        </Link>
+        <div className="border-t border-border/60 mt-2 pt-2 space-y-2">
+          {/* Legal Links Footer */}
+          <div className="px-3 pt-1 space-y-1.5 text-[11px] text-muted-foreground/80">
+            <div className="flex flex-wrap gap-x-2.5 gap-y-1 font-medium">
+              <Link to="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
+              <Link to="/terms" className="hover:text-foreground hover:underline">Terms</Link>
+              <Link to="/cookies" className="hover:text-foreground hover:underline">Cookies</Link>
+              <Link to="/data-deletion" className="hover:text-foreground hover:underline">Data controls</Link>
+            </div>
+            <div className="text-[10px] text-muted-foreground/60 leading-tight">
+              © 2026 Sonara — Music Beyond Boundaries
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
   );

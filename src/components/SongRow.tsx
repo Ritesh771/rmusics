@@ -24,16 +24,16 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbum = t
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const { data: liked = [] } = useQuery({
+  const { data: isLiked = false } = useQuery({
     queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id");
+      const { data } = await supabase.from("liked_songs").select("song_id").eq("user_id", user!.id);
       return data?.map((r) => r.song_id) ?? [];
     },
+    select: (likedIds) => likedIds.includes(song.id),
     enabled: !!user,
     staleTime: 1000 * 60 * 10,
   });
-  const isLiked = liked.includes(song.id);
 
   const toggleLike = useMutation({
     mutationFn: async () => {
@@ -59,20 +59,29 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbum = t
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlay(); } }}
-      className="group grid grid-cols-[16px_4fr_3fr_minmax(0,1fr)_60px] items-center gap-4 px-4 py-2 rounded-md hover:bg-accent/50 cursor-pointer active:bg-accent/70 transition-colors select-none"
+      className={
+        "group grid grid-cols-[16px_4fr_3fr_minmax(0,1fr)_60px] items-center gap-4 px-4 py-2 rounded-xl cursor-pointer select-none border [content-visibility:auto] [contain-intrinsic-size:56px] " +
+        (isCurrent
+          ? "bg-primary/10 border-primary/40 shadow-xs"
+          : "border-transparent hover:bg-accent/50 active:bg-accent/70")
+      }
     >
-      <div className="text-sm text-muted-foreground text-center">
-        <span className="group-hover:hidden">{isPlayingThis ? "♪" : index + 1}</span>
+      <div className="text-sm text-center">
+        <span className={"group-hover:hidden font-medium " + (isCurrent ? "text-primary font-bold" : "text-muted-foreground")}>
+          {isPlayingThis ? "♪" : index + 1}
+        </span>
         <button onClick={(e) => { e.stopPropagation(); handlePlay(); }} className="hidden group-hover:inline">
-          {isPlayingThis ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {isPlayingThis ? <Pause className="h-3.5 w-3.5 text-primary" /> : <Play className="h-3.5 w-3.5 text-foreground" />}
         </button>
       </div>
       <div className="flex items-center gap-3 min-w-0">
-        <div className="h-10 w-10 rounded bg-muted shrink-0 overflow-hidden">
+        <div className={"h-10 w-10 rounded-lg bg-muted shrink-0 overflow-hidden border " + (isCurrent ? "border-primary/50 shadow-xs" : "border-border/40")}>
           {song.thumbnail_url && <img src={song.thumbnail_url} alt="" className="h-full w-full object-cover" />}
         </div>
         <div className="min-w-0">
-          <div className={"text-sm font-medium truncate " + (isCurrent ? "text-primary" : "")}>{cleanSongTitle(song.title)}</div>
+          <div className={"text-sm font-semibold truncate " + (isCurrent ? "text-primary" : "text-foreground")}>
+            {cleanSongTitle(song.title)}
+          </div>
           <div className="text-xs text-muted-foreground truncate">{song.artist}</div>
         </div>
       </div>

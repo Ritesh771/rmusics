@@ -4,7 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SongRow } from "@/components/SongRow";
 import { PlaylistSkeleton } from "@/components/Skeletons";
-import { Music, Play, Pencil, Trash2, Share2, Download } from "lucide-react";
+import { Music, Play, Pencil, Trash2, Share2, Download, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,8 +34,31 @@ function PlaylistPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const playQueue = usePlayer((s) => s.playQueue);
+  const [copiedShare, setCopiedShare] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [dlProgress, setDlProgress] = useState(0);
+
+  const handleSharePlaylist = async () => {
+    try {
+      if (playlist && !playlist.is_public) {
+        // Ensure playlist is set to public so shared link is viewable by recipient
+        await supabase
+          .from("playlists")
+          .update({ is_public: true, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        qc.invalidateQueries({ queryKey: ["playlist", id] });
+        qc.invalidateQueries({ queryKey: ["playlists"] });
+      }
+
+      const shareUrl = `${window.location.origin}/playlist/${id}`;
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShare(true);
+      toast.success("Public playlist link copied to clipboard");
+      setTimeout(() => setCopiedShare(false), 2500);
+    } catch (e) {
+      toast.error("Failed to copy link");
+    }
+  };
 
   const downloadAll = async (list: Song[]) => {
     if (!list.length || downloading) return;
@@ -160,10 +183,15 @@ function PlaylistPage() {
             <Play className="h-6 w-6 fill-primary-foreground text-primary-foreground" />
           </Button>
           <Button variant="ghost" size="icon" onClick={openEdit}><Pencil className="h-5 w-5" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => {
-            navigator.clipboard.writeText(window.location.href);
-            toast.success("Link copied");
-          }}><Share2 className="h-5 w-5" /></Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSharePlaylist}
+            title="Share playlist"
+            className="transition-colors hover:text-primary"
+          >
+            {copiedShare ? <Check className="h-5 w-5 text-green-500" /> : <Share2 className="h-5 w-5" />}
+          </Button>
           <Button
             variant="ghost"
             size="sm"

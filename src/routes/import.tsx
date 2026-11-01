@@ -103,7 +103,21 @@ function ImportSpotifyPage() {
   const [syncErrorMessage, setSyncErrorMessage] = useState("");
   const cancelSyncRef = useRef(false);
 
-  // Load existing songs library to match tracks
+  const { data: userPlaylists = [] } = useQuery({
+    queryKey: ["playlists", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data } = await supabase.from("playlists").select("id, name, cover_url").eq("user_id", user.id);
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const existingPlaylistMatch = useMemo(() => {
+    if (!spotifyData || !playlistTitle.trim()) return null;
+    const cleanTitle = playlistTitle.trim().toLowerCase();
+    return userPlaylists.find((p) => p.name.trim().toLowerCase() === cleanTitle) ?? null;
+  }, [spotifyData, playlistTitle, userPlaylists]);
   const { data: librarySongs = [] } = useQuery({
     queryKey: ["songs"],
     queryFn: async () => {
@@ -305,7 +319,11 @@ function ImportSpotifyPage() {
 
       setSyncResult(result);
       setSyncPhase("complete");
-      toast.success(`Created "${result.name}" with ${result.totalTracks} tracks.`);
+      if ((result as any).isUpdated) {
+        toast.success(`Updated "${result.name}" with ${result.totalTracks} tracks.`);
+      } else {
+        toast.success(`Created "${result.name}" with ${result.totalTracks} tracks.`);
+      }
     } catch (saveErr: any) {
       console.error("Save playlist error:", saveErr);
       setSyncPhase("error");
@@ -335,11 +353,11 @@ function ImportSpotifyPage() {
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
       {/* Banner */}
-      <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-violet-900/40 via-purple-900/30 to-indigo-900/40 border border-violet-500/20 overflow-hidden shadow-xl">
-        <div className="absolute -top-12 -right-12 w-64 h-64 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-primary/20 via-purple-500/15 to-indigo-500/20 dark:from-violet-900/40 dark:via-purple-900/30 dark:to-indigo-900/40 border border-primary/20 overflow-hidden shadow-sm">
+        <div className="absolute -top-12 -right-12 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1ED760]/15 border border-[#1ED760]/30 text-[#1ED760] text-xs font-semibold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold uppercase tracking-wider">
               <SpotifyIcon className="h-4 w-4" />
               <span>Spotify Playlist Importer</span>
             </div>
@@ -455,6 +473,11 @@ function ImportSpotifyPage() {
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                       {matchedCount} / {spotifyData.tracks.length} ready in library
                     </span>
+                    {existingPlaylistMatch && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                        <span>Will update existing playlist</span>
+                      </span>
+                    )}
                     {spotifyData.tracks.length > matchedCount && (
                       <span className="px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/30 flex items-center gap-1">
                         <CloudDownload className="h-3 w-3" />
@@ -473,15 +496,17 @@ function ImportSpotifyPage() {
                     {importing ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Recreating & Syncing…</span>
+                        <span>{existingPlaylistMatch ? "Updating Playlist…" : "Recreating & Syncing…"}</span>
                       </>
                     ) : (
                       <>
                         <ListPlus className="h-4 w-4" />
                         <span>
-                          {matchedCount === spotifyData.tracks.length
-                            ? `Create Playlist & Add ${spotifyData.tracks.length} Songs`
-                            : `Create Playlist & Sync ${spotifyData.tracks.length} Songs`}
+                          {existingPlaylistMatch
+                            ? `Update "${existingPlaylistMatch.name}" (${spotifyData.tracks.length} Songs)`
+                            : matchedCount === spotifyData.tracks.length
+                              ? `Create Playlist & Add ${spotifyData.tracks.length} Songs`
+                              : `Create Playlist & Sync ${spotifyData.tracks.length} Songs`}
                         </span>
                       </>
                     )}

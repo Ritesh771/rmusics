@@ -11,14 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as LikedRouteImport } from './routes/liked'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ApiStreamRouteImport } from './routes/api/stream'
 import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
 
@@ -30,6 +34,16 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiesRoute = CookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataDeletionRoute = DataDeletionRouteImport.update({
+  id: '/data-deletion',
+  path: '/data-deletion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -57,6 +71,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -70,6 +89,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiStreamRoute = ApiStreamRouteImport.update({
@@ -86,28 +110,36 @@ const PlaylistIdRoute = PlaylistIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/cookies': typeof CookiesRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/history': typeof HistoryRoute
   '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/cookies': typeof CookiesRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/history': typeof HistoryRoute
   '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
@@ -115,14 +147,18 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/cookies': typeof CookiesRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/history': typeof HistoryRoute
   '/import': typeof ImportRoute
   '/library': typeof LibraryRoute
   '/liked': typeof LikedRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/api/stream': typeof ApiStreamRoute
   '/playlist/$id': typeof PlaylistIdRoute
 }
@@ -131,42 +167,54 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/cookies'
+    | '/data-deletion'
     | '/history'
     | '/import'
     | '/library'
     | '/liked'
     | '/login'
+    | '/privacy'
     | '/search'
     | '/settings'
     | '/sitemap.xml'
+    | '/terms'
     | '/api/stream'
     | '/playlist/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
+    | '/cookies'
+    | '/data-deletion'
     | '/history'
     | '/import'
     | '/library'
     | '/liked'
     | '/login'
+    | '/privacy'
     | '/search'
     | '/settings'
     | '/sitemap.xml'
+    | '/terms'
     | '/api/stream'
     | '/playlist/$id'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/cookies'
+    | '/data-deletion'
     | '/history'
     | '/import'
     | '/library'
     | '/liked'
     | '/login'
+    | '/privacy'
     | '/search'
     | '/settings'
     | '/sitemap.xml'
+    | '/terms'
     | '/api/stream'
     | '/playlist/$id'
   fileRoutesById: FileRoutesById
@@ -174,14 +222,18 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  CookiesRoute: typeof CookiesRoute
+  DataDeletionRoute: typeof DataDeletionRoute
   HistoryRoute: typeof HistoryRoute
   ImportRoute: typeof ImportRoute
   LibraryRoute: typeof LibraryRoute
   LikedRoute: typeof LikedRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermsRoute: typeof TermsRoute
   ApiStreamRoute: typeof ApiStreamRoute
   PlaylistIdRoute: typeof PlaylistIdRoute
 }
@@ -200,6 +252,20 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookies': {
+      id: '/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof CookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-deletion': {
+      id: '/data-deletion'
+      path: '/data-deletion'
+      fullPath: '/data-deletion'
+      preLoaderRoute: typeof DataDeletionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -237,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
@@ -256,6 +329,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/stream': {
@@ -278,14 +358,18 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  CookiesRoute: CookiesRoute,
+  DataDeletionRoute: DataDeletionRoute,
   HistoryRoute: HistoryRoute,
   ImportRoute: ImportRoute,
   LibraryRoute: LibraryRoute,
   LikedRoute: LikedRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermsRoute: TermsRoute,
   ApiStreamRoute: ApiStreamRoute,
   PlaylistIdRoute: PlaylistIdRoute,
 }

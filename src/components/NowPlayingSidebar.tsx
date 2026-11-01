@@ -20,7 +20,7 @@ export function NowPlayingSidebar() {
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id");
+      const { data } = await supabase.from("liked_songs").select("song_id").eq("user_id", user!.id);
       return data?.map((r) => r.song_id) ?? [];
     },
     enabled: !!user,

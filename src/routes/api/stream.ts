@@ -18,7 +18,7 @@ const HOP_BY_HOP = new Set([
 ]);
 
 function allowedHost(): string | null {
-  const pub = process.env.R2_PUBLIC_URL;
+  const pub = process.env.R2_PUBLIC_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL || "https://pub-03aa5d89bee943c7a60f4f528c80bdf9.r2.dev";
   if (!pub) return null;
   try {
     return new URL(pub).hostname;

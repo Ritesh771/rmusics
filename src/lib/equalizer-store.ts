@@ -10,19 +10,19 @@ export const EQ_LABELS = ["60Hz", "150Hz", "400Hz", "1kHz", "2.4kHz", "15kHz"] a
 
 export const EQ_PRESETS: Record<string, [number, number, number, number, number, number]> = {
   Flat: [0, 0, 0, 0, 0, 0],
-  "Bass Booster": [6, 5, 2, 0, -1, -2],
-  "Bass Reducer": [-6, -5, -2, 0, 1, 2],
-  Rock: [5, 3, -1, 1, 3, 5],
-  Pop: [-1, 2, 4, 3, 1, -1],
-  "Hip-Hop": [6, 4, 0, 2, 1, 3],
-  Electronic: [4, 3, 0, 2, 4, 5],
-  Jazz: [3, 2, 1, 2, 1, 3],
-  Classical: [4, 3, 2, 2, 3, 4],
-  "Vocal Booster": [-2, -1, 3, 5, 3, 0],
-  Acoustic: [3, 2, 1, 2, 3, 2],
-  Deep: [5, 3, 1, 0, -2, -4],
-  "Treble Booster": [-3, -2, 0, 2, 4, 6],
-  "R&B": [4, 5, 2, -1, 2, 3],
+  "Bass Booster": [9, 7, 2, 0, -2, -3],
+  "Bass Reducer": [-8, -6, -2, 0, 2, 3],
+  Rock: [7, 4, -1, 2, 5, 7],
+  Pop: [-1, 3, 5, 4, 2, -1],
+  "Hip-Hop": [9, 6, 0, 3, 2, 4],
+  Electronic: [6, 4, 0, 3, 6, 7],
+  Jazz: [4, 3, 2, 3, 2, 4],
+  Classical: [5, 3, 2, 2, 4, 5],
+  "Vocal Booster": [-3, -1, 4, 7, 4, 0],
+  Acoustic: [4, 3, 2, 3, 4, 3],
+  Deep: [8, 5, 2, 0, -2, -5],
+  "Treble Booster": [-4, -2, 0, 4, 6, 9],
+  "R&B": [6, 7, 3, -1, 3, 4],
 };
 
 interface EqualizerState {
@@ -46,9 +46,13 @@ function applyFilterGains(gains: [number, number, number, number, number, number
   if (!biquadFilters.length || !audioCtx) return;
   const now = audioCtx.currentTime;
   biquadFilters.forEach((filter, idx) => {
-    const targetGain = enabled ? (gains[idx] ?? 0) : 0;
+    // Clamp gains between -12dB and +12dB to guarantee Web Audio API safety
+    const raw = gains[idx] ?? 0;
+    const clamped = Math.max(-12, Math.min(12, raw));
+    const targetGain = enabled ? clamped : 0;
     try {
-      filter.gain.setTargetAtTime(targetGain, now, 0.05);
+      filter.gain.cancelScheduledValues(now);
+      filter.gain.setTargetAtTime(targetGain, now, 0.03);
     } catch {
       filter.gain.value = targetGain;
     }
@@ -113,8 +117,12 @@ export function attachEqualizerToAudio(audioElement: HTMLAudioElement) {
 }
 
 export function resumeAudioContext() {
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
+    const st = useEqualizer.getState();
+    applyFilterGains(st.gains, st.enabled);
   }
 }
 

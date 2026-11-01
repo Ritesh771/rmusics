@@ -184,6 +184,7 @@ function RootComponent() {
 function RootInner() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const isLoginPage = pathname === "/login";
+  const isPublicLegalPage = ["/privacy", "/terms", "/cookies", "/data-deletion"].includes(pathname);
   const { user } = useAuth();
   usePersistentQueue(user?.id ?? null);
   const theme = useTheme();
@@ -194,6 +195,27 @@ function RootInner() {
         <Outlet />
         <Toaster theme={theme} />
       </>
+    );
+  }
+
+  // When unauthenticated, render legal pages directly without sidebar/topbar/music player in dark mode
+  if (!user && isPublicLegalPage) {
+    return (
+      <div className="dark min-h-screen bg-[#05030f] text-white relative selection:bg-[#d62cff] selection:text-white overflow-y-auto">
+        <div
+          className="fixed inset-0 pointer-events-none z-0"
+          style={{
+            background: `
+              radial-gradient(60% 50% at 45% 55%, rgba(110,40,220,0.35), transparent 70%),
+              radial-gradient(40% 40% at 90% 10%, rgba(214,44,255,0.12), transparent 70%)
+            `,
+          }}
+        />
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-8 min-h-screen flex flex-col">
+          <Outlet />
+        </div>
+        <Toaster theme={theme} />
+      </div>
     );
   }
 

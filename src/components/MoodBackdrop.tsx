@@ -51,13 +51,12 @@ async function extractPalette(url: string): Promise<string[] | null> {
 }
 
 export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
-  const song = usePlayer((s) => s.queue[s.currentIndex] ?? null);
+  const artworkUrl = usePlayer((s) => s.queue[s.currentIndex]?.thumbnail_url);
   const isPlaying = usePlayer((s) => s.isPlaying);
   const { enabled, palette, setPalette } = useMood();
   const lastUrl = useRef<string | null>(null);
 
   useEffect(() => {
-    const artworkUrl = song?.thumbnail_url;
     if (!artworkUrl || artworkUrl === lastUrl.current) return;
     lastUrl.current = artworkUrl;
     // Load artwork through the same-origin R2 proxy. This keeps the canvas
@@ -65,7 +64,7 @@ export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
     extractPalette(streamUrl(artworkUrl)).then((p) => {
       if (p && p.length && lastUrl.current === artworkUrl) setPalette(p);
     });
-  }, [song?.thumbnail_url, setPalette]);
+  }, [artworkUrl, setPalette]);
 
   if (!enabled) return null;
 

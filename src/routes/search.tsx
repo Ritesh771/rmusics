@@ -9,8 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, Music, X, Loader2, ArrowLeft, Play } from "lucide-react";
 import { usePlayer, type Song } from "@/lib/player-store";
+import { useAuth } from "@/lib/auth-hook";
 
 export const Route = createFileRoute("/search")({
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
   head: () => ({ meta: [{ title: "Sonara — Search & Browse" }] }),
   component: SearchPage,
 });
@@ -135,10 +139,20 @@ const SPOTIFY_CATEGORIES: BrowseCategory[] = [
 ];
 
 function SearchPage() {
-  const [q, setQ] = useState("");
-  const [term, setTerm] = useState("");
+  const { user } = useAuth();
+  const searchParams = Route.useSearch();
+  const [q, setQ] = useState(searchParams.q || "");
+  const [term, setTerm] = useState(searchParams.q || "");
   const [activeCategory, setActiveCategory] = useState<BrowseCategory | null>(null);
   const playQueue = usePlayer((s) => s.playQueue);
+
+  // Sync state if url search params change
+  useEffect(() => {
+    if (searchParams.q != null) {
+      setQ(searchParams.q);
+      setTerm(searchParams.q.trim());
+    }
+  }, [searchParams.q]);
 
   // Debounce input → query term
   useEffect(() => {
@@ -164,13 +178,19 @@ function SearchPage() {
   });
 
   const { data: playlists = [] } = useQuery({
-    queryKey: ["playlists", "search", term],
+    queryKey: ["playlists", "search", term, user?.id],
     queryFn: async () => {
-      let query = supabase.from("playlists").select("*").order("updated_at", { ascending: false });
+      if (!user?.id) return [];
+      let query = supabase
+        .from("playlists")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
       if (term) query = query.ilike("name", `%${escape(term)}%`);
       const { data } = await query.limit(20);
       return data ?? [];
     },
+    enabled: !!user?.id,
   });
 
   // Calculate filtered songs based on search term and selected category

@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  ChevronDown, Music, Share2, ListMusic, Play, Heart,
+  ChevronDown, Music, Share2, ListMusic, Play, Heart, Info,
 } from "lucide-react";
 import { cleanSongTitle } from "@/lib/song-utils";
 import { useAuth } from "@/lib/auth-hook";
@@ -86,7 +86,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id");
+      const { data } = await supabase.from("liked_songs").select("song_id").eq("user_id", user!.id);
       return data?.map((r) => r.song_id) ?? [];
     },
     enabled: !!user,
@@ -137,6 +137,15 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
             size="icon"
             variant="ghost"
             className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full h-9 w-9 cursor-pointer"
+            onClick={() => setShowCreditsModal(true)}
+            title="Song Credits & Info"
+          >
+            <Info className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-full h-9 w-9 cursor-pointer"
             onClick={handleShare}
             title="Share track"
           >
@@ -181,107 +190,50 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
             )}
           </div>
 
-          {/* Song Title, Artist, & Like Button */}
+          {/* Song Title, Artist, & Actions */}
           <div className="w-full flex items-center justify-between gap-4 mt-6 px-1">
             <div className="min-w-0">
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground truncate">
                 {cleanSongTitle(song.title)}
               </h2>
-              <p className="text-sm sm:text-base font-medium text-muted-foreground truncate mt-1">
-                {song.artist}
-              </p>
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="text-foreground hover:bg-accent/60 rounded-full h-10 w-10 shrink-0 cursor-pointer"
-              onClick={() => toggleLike.mutate()}
-            >
-              <Heart
-                className={cn(
-                  "h-6 w-6 transition-colors",
-                  isLiked ? "fill-primary text-primary" : "text-muted-foreground"
-                )}
-              />
-            </Button>
-          </div>
-
-          {/* SPOTIFY DUAL CARDS (Credits on left, Next in queue on right) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6">
-            {/* Left Card: Credits */}
-            <div className="bg-card/70 border border-border/70 rounded-2xl p-4 backdrop-blur-md shadow-xs flex flex-col justify-between space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-foreground">Credits</span>
-                <button
-                  onClick={() => setShowCreditsModal(true)}
-                  className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
-                >
-                  Show all
-                </button>
-              </div>
-              <div className="space-y-1">
-                <div className="font-bold text-sm text-foreground truncate">
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm sm:text-base font-medium text-muted-foreground truncate">
                   {song.artist}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Main Artist • Performer
-                </div>
+                </p>
+                {song.album && (
+                  <>
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="text-sm font-medium text-muted-foreground truncate">
+                      {song.album}
+                    </span>
+                  </>
+                )}
               </div>
-              {song.album && (
-                <div className="text-xs text-muted-foreground/80 truncate pt-1 border-t border-border/40">
-                  Album: <span className="text-foreground font-medium">{song.album}</span>
-                </div>
-              )}
             </div>
-
-            {/* Right Card: Next in Queue */}
-            <div className="bg-card/70 border border-border/70 rounded-2xl p-4 backdrop-blur-md shadow-xs flex flex-col justify-between space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-foreground">Next in queue</span>
-                <button
-                  onClick={toggleQueuePanel}
-                  className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
-                >
-                  Open queue
-                </button>
-              </div>
-
-              {nextSong ? (
-                <div className="flex items-center gap-3">
-                  <div className="h-11 w-11 rounded-lg bg-muted shrink-0 overflow-hidden border border-border/50">
-                    {nextSong.thumbnail_url ? (
-                      <img
-                        src={nextSong.thumbnail_url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <Music className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold truncate text-foreground">
-                      {cleanSongTitle(nextSong.title)}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {nextSong.artist}
-                    </div>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 rounded-full text-foreground hover:bg-accent/80 shrink-0 cursor-pointer"
-                    onClick={() => next()}
-                    title="Skip to next"
-                  >
-                    <Play className="h-4 w-4 fill-current ml-0.5" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground py-2">
-                  No more tracks queued up.
-                </div>
-              )}
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full text-xs font-semibold h-8 px-3 gap-1.5 border-border/70 hover:bg-accent/60 cursor-pointer hidden sm:flex"
+                onClick={() => setShowCreditsModal(true)}
+              >
+                <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Credits</span>
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="text-foreground hover:bg-accent/60 rounded-full h-10 w-10 shrink-0 cursor-pointer"
+                onClick={() => toggleLike.mutate()}
+                title={isLiked ? "Remove from Liked Songs" : "Save to Liked Songs"}
+              >
+                <Heart
+                  className={cn(
+                    "h-6 w-6 transition-colors",
+                    isLiked ? "fill-primary text-primary" : "text-muted-foreground"
+                  )}
+                />
+              </Button>
             </div>
           </div>
         </div>

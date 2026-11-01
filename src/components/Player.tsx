@@ -536,7 +536,7 @@ export function Player() {
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id");
+      const { data } = await supabase.from("liked_songs").select("song_id").eq("user_id", user!.id);
       return data?.map((r) => r.song_id) ?? [];
     },
     enabled: !!user,
@@ -607,9 +607,21 @@ export function Player() {
           // Network hiccup — nudge the element without dropping playback intent.
           if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {});
         }}
-        onError={() => {
+        onError={(e) => {
           const audio = audioRef.current;
           if (!audio) return;
+          const currentSrc = audio.src;
+          const songUrl = song ? streamUrl(song.audio_url) : "";
+
+          // Fallback: If same-origin proxy fails or 403s, fall back directly to upstream audio URL
+          if (song?.audio_url && currentSrc !== song.audio_url && !currentSrc.includes("direct_fallback=1")) {
+            console.warn("[Player] Stream proxy error, falling back to direct audio URL:", song.audio_url);
+            audio.src = song.audio_url;
+            audio.load();
+            if (usePlayer.getState().isPlaying) audio.play().catch(() => {});
+            return;
+          }
+
           const state = usePlayer.getState();
           // Repeat-one: try harder before giving up so a hiccup doesn't skip
           // the song the user explicitly asked to loop.

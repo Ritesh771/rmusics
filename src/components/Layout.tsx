@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
 import { NowPlayingSidebar } from "./NowPlayingSidebar";
@@ -19,6 +19,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const nav = useNavigate();
   const { user, loading } = useAuth();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Automatically scroll main viewport back to top on page navigation
+  useEffect(() => {
+    const el = mainRef.current;
+    if (el) {
+      el.scrollTop = 0;
+      el.scrollLeft = 0;
+    }
+  }, [pathname]);
 
   // Realtime updates for library, playlists, and songs
   useEffect(() => {
@@ -42,11 +52,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [qc]);
 
+  const PUBLIC_ROUTES = ["/login", "/privacy", "/terms", "/cookies", "/data-deletion"];
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
   useEffect(() => {
-    if (!loading && !user && pathname !== "/login") {
-      nav({ to: "/login" });
+    if (!loading && !user && !isPublicRoute) {
+      const redirectQuery = pathname && pathname !== "/" ? `?redirect=${encodeURIComponent(pathname)}` : "";
+      nav({ to: `/login${redirectQuery}` as any });
     }
-  }, [loading, user, pathname, nav]);
+  }, [loading, user, pathname, isPublicRoute, nav]);
 
   const mobileNav = [
     { to: "/", icon: Home, label: "Home" },
@@ -56,7 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden relative">
+    <div id="app-layout" className="h-screen flex flex-col bg-background text-foreground overflow-hidden relative">
       <MoodBackdrop intensity={0.7} />
 
       {/* TOP SPOTIFY-STYLE NAVBAR */}
@@ -67,10 +81,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Sidebar />
 
         <main
+          ref={mainRef}
+          key={pathname}
           id="main-content"
-          className="flex-1 bg-card/85 backdrop-blur-xl border border-border/70 rounded-2xl overflow-y-auto pb-28 md:pb-24 shadow-xs"
+          className="flex-1 bg-card border border-border/70 rounded-2xl overflow-y-auto pb-28 md:pb-24 shadow-xs [contain:paint]"
         >
-          {loading || !user ? (
+          {loading || (!user && !isPublicRoute) ? (
             <>
               <AppShellSkeleton />
               <div className="hidden">{children}</div>

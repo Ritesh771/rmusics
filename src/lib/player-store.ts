@@ -60,7 +60,9 @@ type PlayerState = {
   setProgress: (p: number) => void;
   setDuration: (d: number) => void;
   toggleShuffle: () => void;
+  setShuffle: (shuffle: boolean) => void;
   cycleRepeat: () => void;
+  setRepeat: (repeat: RepeatMode) => void;
   seek: (t: number) => void;
   _seekTarget: number | null;
   clearSeek: () => void;
@@ -221,10 +223,27 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       set({ shuffle: false, queue: originalQueue, currentIndex: idx >= 0 ? idx : 0 });
     }
   },
+  setShuffle: (next: boolean) => {
+    const { shuffle, queue, originalQueue, currentIndex } = get();
+    if (shuffle === next) return;
+    if (!queue.length) {
+      set({ shuffle: next });
+      return;
+    }
+    if (next) {
+      const reshuffled = shuffleArr(queue, currentIndex);
+      set({ shuffle: true, queue: reshuffled, currentIndex: 0 });
+    } else {
+      const cur = queue[currentIndex];
+      const idx = originalQueue.findIndex((s) => s.id === cur?.id);
+      set({ shuffle: false, queue: originalQueue, currentIndex: idx >= 0 ? idx : 0 });
+    }
+  },
   cycleRepeat: () =>
     set((s) => ({
       repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
     })),
+  setRepeat: (repeat: RepeatMode) => set({ repeat }),
   seek: (t) => set({ _seekTarget: t, progress: t }),
   clearSeek: () => set({ _seekTarget: null }),
   setSleepTimer: (minutes) =>

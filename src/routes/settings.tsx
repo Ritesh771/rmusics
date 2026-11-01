@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useAuth, getDisplayName, getAvatarUrl } from "@/lib/auth-hook";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useTheme, toggleTheme } from "@/lib/theme-store";
 import { useMood } from "@/lib/mood-store";
 import { useShake } from "@/lib/shake-store";
@@ -13,11 +12,19 @@ import {
   EQ_LABELS,
   EQ_PRESETS,
 } from "@/lib/equalizer-store";
+import { usePlayer, type RepeatMode } from "@/lib/player-store";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sliders,
   Volume2,
@@ -31,6 +38,8 @@ import {
   Radio,
   AudioLines,
   Disc,
+  Shield,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -44,6 +53,22 @@ function SettingsPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
+
+  // Check if current user is admin
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["is-admin", user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user,
+  });
 
   // Equalizer store
   const eqEnabled = useEqualizer((s) => s.enabled);
@@ -63,10 +88,64 @@ function SettingsPage() {
   const toggleShake = useShake((s) => s.toggle);
 
   // Playback settings
-  const [audioQuality, setAudioQuality] = useState<"normal" | "high" | "master">("master");
-  const [crossfadeSec, setCrossfadeSec] = useState(0);
-  const [normalizeAudio, setNormalizeAudio] = useState(true);
-  const [autoplay, setAutoplay] = useState(true);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+  const setShuffle = usePlayer((s) => s.setShuffle);
+  const repeat = usePlayer((s) => s.repeat);
+  const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+  const setRepeat = usePlayer((s) => s.setRepeat);
+
+  // App & Audio persistent preferences
+  const [audioQuality, setAudioQuality] = useState<"normal" | "high" | "master">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("sonara_pref_audio_quality") as any) || "master";
+    }
+    return "master";
+  });
+  const [crossfadeSec, setCrossfadeSec] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const v = localStorage.getItem("sonara_pref_crossfade");
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [normalizeAudio, setNormalizeAudio] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const v = localStorage.getItem("sonara_pref_normalize");
+      return v !== null ? v === "true" : true;
+    }
+    return true;
+  });
+  const [autoplay, setAutoplay] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const v = localStorage.getItem("sonara_pref_autoplay");
+      return v !== null ? v === "true" : true;
+    }
+    return true;
+  });
+
+  const updateAudioQuality = (q: "normal" | "high" | "master") => {
+    setAudioQuality(q);
+    if (typeof window !== "undefined") localStorage.setItem("sonara_pref_audio_quality", q);
+    toast.success(`Streaming quality set to ${q === "master" ? "Very High (320k)" : q === "high" ? "High (256k)" : "Normal (128k)"}`);
+  };
+
+  const updateNormalize = (checked: boolean) => {
+    setNormalizeAudio(checked);
+    if (typeof window !== "undefined") localStorage.setItem("sonara_pref_normalize", String(checked));
+    toast.success(`Volume normalization ${checked ? "enabled" : "disabled"}`);
+  };
+
+  const updateAutoplay = (checked: boolean) => {
+    setAutoplay(checked);
+    if (typeof window !== "undefined") localStorage.setItem("sonara_pref_autoplay", String(checked));
+    toast.success(`Autoplay next songs ${checked ? "enabled" : "disabled"}`);
+  };
+
+  const updateCrossfade = (val: number) => {
+    setCrossfadeSec(val);
+    if (typeof window !== "undefined") localStorage.setItem("sonara_pref_crossfade", String(val));
+  };
 
   const name = user ? getDisplayName(user) : "User";
   const avatar = user ? getAvatarUrl(user) : null;
@@ -155,46 +234,45 @@ function SettingsPage() {
           </div>
         </div>
 
-        {/* Preset Selection Chips */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Equalizer Presets
+        {/* Equalizer Preset Dropdown & Reset */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-muted/40 border border-border/60">
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+              Preset:
             </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={resetToFlat}
-              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1.5 cursor-pointer"
+            <Select
+              value={eqPreset}
+              onValueChange={(val) => {
+                setEqPreset(val);
+                toast.success(`Equalizer preset set to "${val}"`);
+              }}
             >
-              <RotateCcw className="h-3 w-3" />
-              <span>Reset to Flat</span>
-            </Button>
+              <SelectTrigger className="w-[180px] sm:w-[220px] h-9 text-xs font-semibold bg-background/80 border-border/80">
+                <SelectValue placeholder="Select preset" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 bg-popover/95 backdrop-blur-md">
+                {Object.keys(EQ_PRESETS).map((presetName) => (
+                  <SelectItem
+                    key={presetName}
+                    value={presetName}
+                    className="text-xs font-medium cursor-pointer"
+                  >
+                    {presetName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            {Object.keys(EQ_PRESETS).map((presetName) => {
-              const active = eqPreset === presetName;
-              return (
-                <button
-                  key={presetName}
-                  type="button"
-                  onClick={() => {
-                    setEqPreset(presetName);
-                    toast.success(`Equalizer preset set to "${presetName}"`);
-                  }}
-                  className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer border",
-                    active
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs scale-[1.02]"
-                      : "bg-muted/60 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted"
-                  )}
-                >
-                  {presetName}
-                </button>
-              );
-            })}
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={resetToFlat}
+            className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground gap-1.5 cursor-pointer self-end sm:self-auto"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Reset to Flat</span>
+          </Button>
         </div>
 
         {/* Interactive Visual Equalizer Frequency Curve Graph (Reference UI) */}
@@ -363,8 +441,71 @@ function SettingsPage() {
         </div>
 
         <div className="space-y-5 divide-y divide-border/50">
+          {/* Shuffle Mode */}
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <div className="space-y-0.5">
+              <span className="text-sm font-semibold text-foreground">Shuffle Playback</span>
+              <p className="text-xs text-muted-foreground">
+                Randomize the track order when playing queues and playlists.
+              </p>
+            </div>
+            <Switch
+              checked={shuffle}
+              onCheckedChange={toggleShuffle}
+              aria-label="Toggle Shuffle"
+            />
+          </div>
+
+          {/* Repeat Mode */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4">
+            <div className="space-y-0.5">
+              <span className="text-sm font-semibold text-foreground">Repeat Mode</span>
+              <p className="text-xs text-muted-foreground">
+                Choose between playing continuously, looping the full queue, or repeating the single track.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-xl border border-border/60">
+              <button
+                type="button"
+                onClick={() => setRepeat("off")}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer",
+                  repeat === "off"
+                    ? "bg-card text-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                onClick={() => setRepeat("all")}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer",
+                  repeat === "all"
+                    ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Repeat All
+              </button>
+              <button
+                type="button"
+                onClick={() => setRepeat("one")}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer",
+                  repeat === "one"
+                    ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Repeat One (1)
+              </button>
+            </div>
+          </div>
+
           {/* Audio Quality Selection */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4">
             <div className="space-y-0.5">
               <span className="text-sm font-semibold text-foreground">Streaming Quality</span>
               <p className="text-xs text-muted-foreground">
@@ -374,11 +515,11 @@ function SettingsPage() {
             <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-xl border border-border/60">
               <button
                 type="button"
-                onClick={() => setAudioQuality("normal")}
+                onClick={() => updateAudioQuality("normal")}
                 className={cn(
                   "px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer",
                   audioQuality === "normal"
-                    ? "bg-card text-foreground shadow-xs"
+                    ? "bg-card text-foreground shadow-xs font-bold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -386,11 +527,11 @@ function SettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setAudioQuality("high")}
+                onClick={() => updateAudioQuality("high")}
                 className={cn(
                   "px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer",
                   audioQuality === "high"
-                    ? "bg-card text-foreground shadow-xs"
+                    ? "bg-card text-foreground shadow-xs font-bold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -398,11 +539,11 @@ function SettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setAudioQuality("master")}
+                onClick={() => updateAudioQuality("master")}
                 className={cn(
                   "px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer",
                   audioQuality === "master"
-                    ? "bg-primary text-primary-foreground shadow-xs"
+                    ? "bg-primary text-primary-foreground shadow-xs font-bold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -421,7 +562,7 @@ function SettingsPage() {
             </div>
             <Switch
               checked={normalizeAudio}
-              onCheckedChange={setNormalizeAudio}
+              onCheckedChange={updateNormalize}
               aria-label="Normalize volume"
             />
           </div>
@@ -436,7 +577,7 @@ function SettingsPage() {
             </div>
             <Switch
               checked={autoplay}
-              onCheckedChange={setAutoplay}
+              onCheckedChange={updateAutoplay}
               aria-label="Autoplay next songs"
             />
           </div>
@@ -454,7 +595,7 @@ function SettingsPage() {
               min={0}
               max={12}
               step={1}
-              onValueChange={(val) => setCrossfadeSec(val[0])}
+              onValueChange={(val) => updateCrossfade(val[0])}
               className="w-full cursor-pointer"
             />
           </div>
@@ -575,6 +716,84 @@ function SettingsPage() {
           </div>
         </section>
       )}
+
+      {/* ========================================================= */}
+      {/* ADMIN & MANAGEMENT (Visible only to Admins)              */}
+      {/* ========================================================= */}
+      {isAdmin && (
+        <section className="bg-card border border-border/70 rounded-2xl p-5 sm:p-7 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-bold tracking-tight text-foreground">
+                  Administration Panel
+                </h2>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Direct access for authorized administrators to upload, curate, edit metadata, and manage platform audio tracks.
+              </p>
+            </div>
+            <Link to="/admin">
+              <Button variant="outline" className="gap-2 text-xs font-semibold hover:border-primary cursor-pointer w-full sm:w-auto">
+                <Shield className="h-4 w-4 text-primary" />
+                <span>Open Admin Panel</span>
+                <ArrowRight className="h-3.5 w-3.5 ml-1 text-muted-foreground" />
+              </Button>
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================= */}
+      {/* LEGAL & PRIVACY CONTROLS                                  */}
+      {/* ========================================================= */}
+      <section className="bg-card border border-border/70 rounded-2xl p-5 sm:p-7 shadow-xs space-y-4">
+        <div className="space-y-1 border-b border-border/50 pb-3">
+          <h2 className="text-xl font-bold tracking-tight text-foreground">
+            Legal & Data Controls
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Privacy policies, terms of service, and user data management.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+          <Link
+            to="/privacy"
+            className="p-3.5 rounded-xl bg-muted/40 hover:bg-muted border border-border/60 text-xs font-semibold text-foreground flex flex-col justify-between space-y-2 transition"
+          >
+            <span>Privacy Policy</span>
+            <span className="text-[10px] text-muted-foreground">How data is protected →</span>
+          </Link>
+          <Link
+            to="/terms"
+            className="p-3.5 rounded-xl bg-muted/40 hover:bg-muted border border-border/60 text-xs font-semibold text-foreground flex flex-col justify-between space-y-2 transition"
+          >
+            <span>Terms of Service</span>
+            <span className="text-[10px] text-muted-foreground">Rules & guidelines →</span>
+          </Link>
+          <Link
+            to="/cookies"
+            className="p-3.5 rounded-xl bg-muted/40 hover:bg-muted border border-border/60 text-xs font-semibold text-foreground flex flex-col justify-between space-y-2 transition"
+          >
+            <span>Cookie Policy</span>
+            <span className="text-[10px] text-muted-foreground">Local storage use →</span>
+          </Link>
+          <Link
+            to="/data-deletion"
+            className="p-3.5 rounded-xl bg-destructive/10 hover:bg-destructive/15 border border-destructive/30 text-xs font-semibold text-destructive flex flex-col justify-between space-y-2 transition"
+          >
+            <span>Data Controls</span>
+            <span className="text-[10px] text-destructive/80">Delete or clear data →</span>
+          </Link>
+        </div>
+
+        <div className="text-xs text-muted-foreground pt-3 border-t border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span>© 2026 Sonara — Music Beyond Boundaries</span>
+          <span className="text-[11px] text-muted-foreground/80">By using Sonara you agree to our Terms and Privacy Policy.</span>
+        </div>
+      </section>
     </div>
   );
 }

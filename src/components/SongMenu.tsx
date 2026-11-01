@@ -1,4 +1,4 @@
-import { MoreHorizontal, Plus, Heart, Share2, Trash2, ListPlus, ListEnd } from "lucide-react";
+import { MoreHorizontal, Plus, Heart, Trash2, ListPlus, ListEnd } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub,
@@ -38,7 +38,7 @@ export function SongMenu({ song, inPlaylistId, trigger, align = "end", className
   const { data: liked = [] } = useQuery({
     queryKey: ["liked", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("liked_songs").select("song_id");
+      const { data } = await supabase.from("liked_songs").select("song_id").eq("user_id", user!.id);
       return data?.map((r) => r.song_id) ?? [];
     },
     enabled: !!user,
@@ -107,12 +107,6 @@ export function SongMenu({ song, inPlaylistId, trigger, align = "end", className
         <DropdownMenuItem onClick={() => toggleLike.mutate()}>
           <Heart className={cn("h-4 w-4 mr-2", isLiked && "fill-primary text-primary")} />
           {isLiked ? "Unlike" : "Like"}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => {
-          navigator.clipboard.writeText(`${window.location.origin}/song/${song.id}`);
-          toast.success("Link copied");
-        }}>
-          <Share2 className="h-4 w-4 mr-2" />Share
         </DropdownMenuItem>
         {inPlaylistId && (
           <>

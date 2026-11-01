@@ -349,7 +349,7 @@ async function fetchViaSpotifyEmbed(
 }
 
 export const fetchSpotifyPlaylist = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ url: z.string().min(5) }).parse(input))
+  .validator((input: { url: string }) => z.object({ url: z.string().min(5) }).parse(input))
   .handler(async ({ data }) => {
     const playlistId = extractPlaylistId(data.url);
 
@@ -427,7 +427,7 @@ const importAndSyncSchema = z.object({
 });
 
 export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
-  .inputValidator((input) => importAndSyncSchema.parse(input))
+  .validator((input: any) => importAndSyncSchema.parse(input))
   .handler(async ({ data }) => {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseKey =
@@ -611,7 +611,7 @@ export const importAndSyncSpotifyPlaylist = createServerFn({ method: "POST" })
         description: data.playlistDescription?.trim() || null,
         cover_url: finalCoverUrl,
         user_id: data.userId,
-        is_public: true,
+        is_public: false,
       }),
     });
 
@@ -714,7 +714,7 @@ const syncSingleTrackSchema = z.object({
 });
 
 export const syncSingleTrack = createServerFn({ method: "POST" })
-  .inputValidator((input) => syncSingleTrackSchema.parse(input))
+  .validator((input: any) => syncSingleTrackSchema.parse(input))
   .handler(async ({ data }) => {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseKey =
@@ -870,10 +870,11 @@ const saveImportedPlaylistSchema = z.object({
   coverArt: z.string().optional(),
   userId: z.string(),
   songIds: z.array(z.string()),
+  spotifyUrl: z.string().optional(),
 });
 
 export const saveImportedPlaylist = createServerFn({ method: "POST" })
-  .inputValidator((input) => saveImportedPlaylistSchema.parse(input))
+  .validator((input: any) => saveImportedPlaylistSchema.parse(input))
   .handler(async ({ data }) => {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseKey =
@@ -900,32 +901,92 @@ export const saveImportedPlaylist = createServerFn({ method: "POST" })
       }
     }
 
-    const createPlRes = await fetch(`${supabaseUrl}/rest/v1/playlists`, {
-      method: "POST",
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify({
-        name: data.playlistName.trim(),
-        description: data.playlistDescription?.trim() || null,
-        cover_url: finalCoverUrl,
-        user_id: data.userId,
-        is_public: true,
-      }),
-    });
+    // Check if a playlist with this name already exists for this user (or match by name/description)
+    const normalizedName = data.playlistName.trim();
+    let existingPlaylist: { id: string; name: string } | null = null;
 
-    if (!createPlRes.ok) {
-      throw new Error(`Failed to create playlist: ${await createPlRes.text()}`);
+    try {
+      const checkRes = await fetch(
+        `${supabaseUrl}/rest/v1/playlists?user_id=eq.${encodeURIComponent(data.userId)}&name=ilike.${encodeURIComponent(normalizedName)}&select=id,name&limit=1`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      );
+      if (checkRes.ok) {
+        const found = await checkRes.json();
+        if (Array.isArray(found) && found.length > 0) {
+          existingPlaylist = found[0];
+        }
+      }
+    } catch (checkErr) {
+      console.warn("Could not check existing playlist:", checkErr);
     }
 
-    const [createdPlaylist] = await createPlRes.json();
+    let targetPlaylistId: string;
+    let targetPlaylistName: string;
+
+    if (existingPlaylist) {
+      // UPDATE EXISTING PLAYLIST
+      targetPlaylistId = existingPlaylist.id;
+      targetPlaylistName = existingPlaylist.name;
+
+      await fetch(`${supabaseUrl}/rest/v1/playlists?id=eq.${targetPlaylistId}`, {
+        method: "PATCH",
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          description: data.playlistDescription?.trim() || null,
+          cover_url: finalCoverUrl,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+
+      // Clear existing playlist_songs before inserting updated track list
+      await fetch(`${supabaseUrl}/rest/v1/playlist_songs?playlist_id=eq.${targetPlaylistId}`, {
+        method: "DELETE",
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      });
+    } else {
+      // CREATE NEW PLAYLIST
+      const createPlRes = await fetch(`${supabaseUrl}/rest/v1/playlists`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          name: normalizedName,
+          description: data.playlistDescription?.trim() || null,
+          cover_url: finalCoverUrl,
+          user_id: data.userId,
+          is_public: false,
+        }),
+      });
+
+      if (!createPlRes.ok) {
+        throw new Error(`Failed to create playlist: ${await createPlRes.text()}`);
+      }
+
+      const [createdPlaylist] = await createPlRes.json();
+      targetPlaylistId = createdPlaylist.id;
+      targetPlaylistName = createdPlaylist.name;
+    }
+
     const uniqueSongIds = Array.from(new Set(data.songIds));
 
     const playlistSongsRows = uniqueSongIds.map((songId, index) => ({
-      playlist_id: createdPlaylist.id,
+      playlist_id: targetPlaylistId,
       song_id: songId,
       position: index,
     }));
@@ -948,8 +1009,9 @@ export const saveImportedPlaylist = createServerFn({ method: "POST" })
     }
 
     return {
-      playlistId: createdPlaylist.id,
-      name: createdPlaylist.name,
+      playlistId: targetPlaylistId,
+      name: targetPlaylistName,
       totalTracks: uniqueSongIds.length,
+      isUpdated: !!existingPlaylist,
     };
   });

@@ -20,13 +20,18 @@ function HistoryPage() {
       const { data } = await supabase
         .from("recently_played")
         .select("played_at, songs(*)")
+        .eq("user_id", user!.id)
         .order("played_at", { ascending: false })
-        .limit(100);
+        .limit(50);
       const seen = new Set<string>();
       const out: Song[] = [];
       for (const r of (data ?? []) as any[]) {
         const s = r.songs as Song | null;
-        if (s && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
+        if (s && !seen.has(s.id)) {
+          seen.add(s.id);
+          out.push(s);
+          if (out.length >= 10) break;
+        }
       }
       return out;
     },

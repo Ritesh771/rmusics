@@ -22,6 +22,7 @@ function LikedPage() {
       const { data } = await supabase
         .from("liked_songs")
         .select("song_id, liked_at, songs(*)")
+        .eq("user_id", user!.id)
         .order("liked_at", { ascending: false });
       return (data ?? []).map((r: any) => r.songs as Song).filter(Boolean);
     },
@@ -35,15 +36,15 @@ function LikedPage() {
 
   return (
     <>
-      <div className="bg-gradient-to-b from-purple-700 to-transparent p-6 pb-12">
+      <div className="bg-gradient-to-b from-primary/30 via-primary/10 to-transparent p-6 pb-12">
         <div className="flex items-end gap-6">
-          <div className="h-44 w-44 bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center rounded shadow-2xl">
+          <div className="h-44 w-44 bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center rounded-2xl shadow-xl">
             <Heart className="h-20 w-20 fill-white text-white" />
           </div>
           <div>
-            <div className="text-xs font-semibold uppercase">Playlist</div>
-            <h1 className="text-5xl font-extrabold mt-2">Liked Songs</h1>
-            <div className="text-sm text-muted-foreground mt-2">{songs.length} songs</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Playlist</div>
+            <h1 className="text-4xl sm:text-5xl font-extrabold mt-2 text-foreground">Liked Songs</h1>
+            <div className="text-sm text-muted-foreground mt-2 font-medium">{songs.length} songs</div>
           </div>
         </div>
       </div>
