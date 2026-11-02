@@ -148,41 +148,34 @@ export function Player() {
       if (!audio || !targetSong) return;
       const requestId = ++playRequestRef.current;
       completedSongRef.current = null;
-      // Keeping autoplay armed before replacing src lets the media element
-      // continue as soon as the next response is ready, even while mobile
-      // browsers heavily throttle page JavaScript in the background.
       audio.autoplay = true;
       errorRetryRef.current = 0;
       if (audio.dataset.songId !== targetSong.id) {
-        // Cover slow networks and background src swaps — otherwise the natural
-        // "pause" event fired by src replacement flips isPlaying to false.
+        // Arm 15s shield against any false pause events during track buffering/loading
         suppressPauseUntil.current = Date.now() + 15000;
         audio.dataset.songId = targetSong.id;
         audio.src = streamUrl(targetSong.audio_url);
-        // Queue the seek via pendingSeekRef so onLoadedMetadata applies it
-        // AFTER the new source is ready. Calling seekAudio() before load()
-        // on an ended element can fire a spurious pause/ended event on the
-        // old source and re-enter completeCurrentSong incorrectly.
-        pendingSeekRef.current = seekTo;
+        // Only queue seek if seekTo > 0; 0 is natural start and seeking to 0 stalls buffering
+        pendingSeekRef.current = seekTo > 0 ? seekTo : null;
         audio.load();
-      } else {
-        // Same song — seek immediately (no src swap, no spurious events).
+      } else if (seekTo > 0) {
         pendingSeekRef.current = null;
         seekAudio(audio, seekTo);
       }
+      usePlayer.setState({ isPlaying: true });
       audio
         .play()
         .then(() => {
           if (requestId === playRequestRef.current) {
             usePlayer.setState({ isPlaying: true });
+            if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+              try { navigator.mediaSession.playbackState = "playing"; } catch {}
+            }
           }
         })
         .catch(() => {
-          // Keep autoplay armed. Mobile browsers can defer this request while
-          // locked and then honor it when the new source becomes playable.
           audio.autoplay = true;
         });
-      usePlayer.setState({ isPlaying: true });
       ensurePlaying(0);
     },
     [seekAudio, ensurePlaying],
@@ -447,7 +440,86 @@ export function Player() {
     }
   }, []);
 
-  // MediaSession — lock-screen / notification controls + reliable background playback
+  // MediaSession persistent action handlers — registered ONCE and never torn down
+  // so Android OS never removes the lock-screen player / media notification.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    const safe = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {}
+    };
+
+    safe("play", () => {
+      resumeAudioContext();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.autoplay = true;
+        audio.play().catch(() => undefined);
+      }
+      usePlayer.setState({ isPlaying: true });
+      try { ms.playbackState = "playing"; } catch {}
+    });
+
+    safe("pause", () => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.autoplay = false;
+        audio.pause();
+      }
+      usePlayer.setState({ isPlaying: false });
+      try { ms.playbackState = "paused"; } catch {}
+    });
+
+    safe("previoustrack", () => {
+      const state = usePlayer.getState();
+      const previous = state.prev();
+      if (previous) playAudioSong(previous, 0);
+    });
+
+    safe("nexttrack", () => {
+      const state = usePlayer.getState();
+      const upcoming = state.next();
+      if (upcoming) playAudioSong(upcoming, 0);
+    });
+
+    safe("seekto", (e) => {
+      if (typeof e.seekTime !== "number") return;
+      const audio = audioRef.current;
+      if (e.fastSeek && audio && typeof (audio as FastSeekAudio).fastSeek === "function") {
+        (audio as FastSeekAudio).fastSeek!(e.seekTime);
+        setProgress(e.seekTime);
+        return;
+      }
+      commitSeek(e.seekTime);
+    });
+
+    safe("seekbackward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress - by);
+    });
+
+    safe("seekforward", (e) => {
+      const by = e.seekOffset ?? 10;
+      commitSeek(usePlayer.getState().progress + by);
+    });
+
+    safe("stop", () => {
+      audioRef.current?.pause();
+      usePlayer.setState({ isPlaying: false });
+      try { ms.playbackState = "none"; } catch {}
+    });
+
+    return () => {
+      [
+        "play", "pause", "previoustrack", "nexttrack",
+        "seekto", "seekbackward", "seekforward", "stop",
+      ].forEach((a) => safe(a as MediaSessionAction, null));
+    };
+  }, [playAudioSong, commitSeek, setProgress]);
+
+  // MediaSession Metadata — updates lock screen with current track info & artwork
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!song) {
@@ -460,78 +532,32 @@ export function Player() {
         artist: song.artist,
         album: song.album ?? "",
         artwork: song.thumbnail_url
-          ? [96, 128, 192, 256, 384, 512].flatMap((s) =>
-              ["image/jpeg", "image/png"].map((type) => ({
-                // Same-origin proxy so iOS/Android can actually fetch the art.
-                src: streamUrl(song.thumbnail_url),
-                sizes: `${s}x${s}`,
-                type,
-              })),
-            )
+          ? [
+              { src: song.thumbnail_url, sizes: "96x96", type: "image/jpeg" },
+              { src: song.thumbnail_url, sizes: "192x192", type: "image/jpeg" },
+              { src: song.thumbnail_url, sizes: "512x512", type: "image/jpeg" },
+            ]
           : [],
       });
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
     } catch {
-      // Some browsers reject remote artwork metadata.
-    }
-    const ms = navigator.mediaSession;
-    const safe = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      // Fallback without artwork if browser rejects remote format
       try {
-        ms.setActionHandler(action, handler);
-      } catch {
-        // Unsupported action on this browser.
-      }
-    };
-    safe("play", () => {
-      resumeAudioContext();
-      if (audioRef.current) audioRef.current.autoplay = true;
-      audioRef.current
-        ?.play()
-        .then(() => {
-          usePlayer.setState({ isPlaying: true });
-          try { navigator.mediaSession.playbackState = "playing"; } catch {}
-        })
-        .catch(() => undefined);
-    });
-    safe("pause", () => {
-      if (audioRef.current) {
-        audioRef.current.autoplay = false;
-        audioRef.current.pause();
-      }
-      usePlayer.setState({ isPlaying: false });
-      try { navigator.mediaSession.playbackState = "paused"; } catch {}
-    });
-    safe("previoustrack", goToPrevious);
-    safe("nexttrack", advanceToNext);
-    safe("seekto", (e) => {
-      if (typeof e.seekTime !== "number") return;
-      const audio = audioRef.current;
-      if (e.fastSeek && audio && typeof (audio as FastSeekAudio).fastSeek === "function") {
-        (audio as FastSeekAudio).fastSeek!(e.seekTime);
-        setProgress(e.seekTime);
-        return;
-      }
-      commitSeek(e.seekTime);
-    });
-    safe("seekbackward", (e) => {
-      const by = e.seekOffset ?? 10;
-      commitSeek(usePlayer.getState().progress - by);
-    });
-    safe("seekforward", (e) => {
-      const by = e.seekOffset ?? 10;
-      commitSeek(usePlayer.getState().progress + by);
-    });
-    safe("stop", () => {
-      audioRef.current?.pause();
-      usePlayer.setState({ isPlaying: false });
-    });
-    return () => {
-      [
-        "play", "pause", "previoustrack", "nexttrack",
-        "seekto", "seekbackward", "seekforward", "stop",
-      ].forEach((a) => safe(a as MediaSessionAction, null));
-    };
-  }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url, isPlaying, advanceToNext, goToPrevious, commitSeek, setProgress]);
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: song.title,
+          artist: song.artist,
+          album: song.album ?? "",
+        });
+      } catch {}
+    }
+  }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url]);
+
+  // MediaSession PlaybackState sync
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    } catch {}
+  }, [isPlaying]);
 
   // Keep position state up-to-date for OS scrubber
   useEffect(() => {
@@ -604,17 +630,18 @@ export function Player() {
           const realDuration = Number.isFinite(audio.duration) ? audio.duration : (loadedSong?.duration ?? 0);
           setDuration(realDuration);
           const pending = pendingSeekRef.current;
-          if (pending != null) {
+          if (pending != null && pending > 0) {
             pendingSeekRef.current = null;
             seekAudio(audio, Math.min(pending, realDuration || pending));
             setProgress(Math.min(pending, realDuration || pending));
+          } else {
+            pendingSeekRef.current = null;
           }
-          if (usePlayer.getState().isPlaying && audio.paused) {
+          if (usePlayer.getState().isPlaying) {
             audio.play().catch(() => {});
           }
         }}
         onPlay={() => {
-          suppressPauseUntil.current = 0;
           resumeAudioContext();
           if (audioRef.current) audioRef.current.autoplay = true;
           usePlayer.setState({ isPlaying: true });
@@ -629,10 +656,10 @@ export function Player() {
           // track — without this guard we'd call completeCurrentSong() again
           // on the already-completed song and the new track would never start.
           if (Date.now() < suppressPauseUntil.current) return;
-          // Safari can deliver the terminal pause while delaying/suppressing
+          // Safari / Android can deliver the terminal pause while delaying/suppressing
           // `ended` after screen lock. Treat a pause at the media boundary as
           // native completion so the next source is installed immediately.
-          if (audio?.ended || (audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.1)) {
+          if (audio?.ended || (audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.2)) {
             completeCurrentSong();
             return;
           }
@@ -642,7 +669,11 @@ export function Player() {
             try { navigator.mediaSession.playbackState = "paused"; } catch {}
           }
         }}
-        onCanPlay={() => { if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {}); }}
+        onCanPlay={() => {
+          if (usePlayer.getState().isPlaying && audioRef.current?.paused) {
+            audioRef.current.play().catch(() => {});
+          }
+        }}
         onStalled={() => {
           // Network hiccup — nudge the element without dropping playback intent.
           if (usePlayer.getState().isPlaying) audioRef.current?.play().catch(() => {});
