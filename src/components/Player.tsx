@@ -92,27 +92,30 @@ export function Player() {
       const state = usePlayer.getState();
       const max = state.duration || Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, max));
-      // Hold the UI at the committed position briefly so the progress bar
-      // never snaps back to the pre-seek time while the media element seeks.
-      seekHoldRef.current = { target, until: performance.now() + 700 };
+      // Immediately set the HTML audio currentTime for zero-lag forward/backward
+      const audio = audioRef.current;
+      if (audio) {
+        try {
+          audio.currentTime = target;
+          if (state.isPlaying && audio.paused) {
+            audio.play().catch(() => {});
+          }
+        } catch {}
+      }
+      seekHoldRef.current = { target, until: performance.now() + 300 };
+      setProgress(target);
       seek(target);
     },
-    [seek],
+    [seek, setProgress],
   );
 
   const seekAudio = useCallback((audio: HTMLAudioElement, time: number) => {
     const target = Math.max(0, Number.isFinite(time) ? time : 0);
-    const fastAudio = audio as FastSeekAudio;
-    if (typeof fastAudio.fastSeek === "function") {
-      try {
-        fastAudio.fastSeek(target);
-        return;
-      } catch {
-        // Fall back to currentTime below.
-      }
-    }
     try {
       audio.currentTime = target;
+      if (usePlayer.getState().isPlaying && audio.paused) {
+        audio.play().catch(() => {});
+      }
     } catch {
       pendingSeekRef.current = target;
     }
@@ -271,17 +274,13 @@ export function Player() {
   useEffect(() => {
     if (_seekTarget != null && audioRef.current) {
       const audio = audioRef.current;
-      // Any seek source (UI bar, full-screen player, lock screen) gets the same
-      // hold window so the progress bar tracks the new position immediately.
-      seekHoldRef.current = { target: _seekTarget, until: performance.now() + 700 };
+      seekHoldRef.current = { target: _seekTarget, until: performance.now() + 300 };
       const readyForSeek =
         audio.readyState >= 1 &&
         (!Number.isFinite(audio.duration) || audio.currentSrc);
       if (readyForSeek) {
         seekAudio(audio, _seekTarget);
       } else {
-        // Audio hasn't hydrated for the current song yet — queue the seek
-        // so onLoadedMetadata applies it once the correct src is buffered.
         pendingSeekRef.current = _seekTarget;
       }
       clearSeek();

@@ -26,6 +26,7 @@ import { useAuth } from "@/lib/auth-hook";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
+import { StatusBar, Style } from "@capacitor/status-bar";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — Sonara" }] }),
@@ -48,8 +49,13 @@ function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
 
-  // Load remembered email on mount
+  // Load remembered email on mount & adapt mobile status bar for light login screen
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#f8f9fc" }).catch(() => {});
+    }
+
     if (typeof window !== "undefined") {
       const savedEmail = localStorage.getItem("sonara_remembered_email");
       if (savedEmail) {
@@ -224,7 +230,7 @@ function LoginPage() {
         />
       </div>
 
-      <div className="relative z-10 max-w-[1536px] w-full mx-auto px-4 sm:px-12 pt-6 sm:pt-8 pb-6 sm:pb-8 flex-1 flex flex-col justify-between">
+      <div className="relative z-10 max-w-[1536px] w-full mx-auto px-4 sm:px-12 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] sm:pt-8 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-8 flex-1 flex flex-col justify-between">
         {/* ========================================================================= */}
         {/* 2. TOP HEADER (Standard clean branding only)                              */}
         {/* ========================================================================= */}
