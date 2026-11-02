@@ -609,6 +609,9 @@ export function Player() {
             seekAudio(audio, Math.min(pending, realDuration || pending));
             setProgress(Math.min(pending, realDuration || pending));
           }
+          if (usePlayer.getState().isPlaying && audio.paused) {
+            audio.play().catch(() => {});
+          }
         }}
         onPlay={() => {
           suppressPauseUntil.current = 0;
