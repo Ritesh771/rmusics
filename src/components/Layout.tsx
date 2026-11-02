@@ -13,6 +13,7 @@ import { Home, Search, Library, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-hook";
 import { MoodBackdrop } from "./MoodBackdrop";
+import { usePlayer } from "@/lib/player-store";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
@@ -108,21 +109,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* BOTTOM FIXED FULL PLAYER */}
       <Player />
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur border-t border-border flex justify-around items-center z-50">
-        {mobileNav.map((it) => (
-          <Link
-            key={it.to}
-            to={it.to}
-            className={cn(
-              "flex flex-col items-center text-xs gap-0.5 px-3 py-1 transition-all duration-200 active:scale-90",
-              pathname === it.to ? "text-primary" : "text-muted-foreground"
-            )}
-          >
-            <it.icon className={cn("h-5 w-5 transition-transform", pathname === it.to && "scale-110")} />
-            {it.label}
-          </Link>
-        ))}
+      {/* Mobile floating glass bottom navigation bar */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-3 left-4 right-4 h-16 rounded-2xl bg-background/65 dark:bg-card/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.55)] flex justify-around items-center z-50 px-2 ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300"
+      >
+        {mobileNav.map((it) => {
+          const isActive = pathname === it.to;
+          return (
+            <Link
+              key={it.to}
+              to={it.to}
+              onClick={() => {
+                if (usePlayer.getState().nowPlayingOpen) {
+                  usePlayer.getState().closeNowPlaying();
+                }
+              }}
+              className={cn(
+                "relative flex flex-col items-center justify-center flex-1 py-1.5 rounded-xl transition-all duration-200 active:scale-95 group",
+                isActive
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground/80 hover:text-foreground"
+              )}
+            >
+              {isActive && (
+                <span className="absolute inset-x-2 inset-y-0.5 rounded-xl bg-primary/12 dark:bg-primary/20 -z-10 animate-in fade-in zoom-in-95 duration-200" />
+              )}
+              <it.icon
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200",
+                  isActive ? "scale-110 drop-shadow-[0_2px_8px_rgba(var(--primary),0.35)]" : "group-hover:scale-105"
+                )}
+              />
+              <span className="text-[11px] tracking-tight mt-0.5 leading-none">
+                {it.label}
+              </span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );

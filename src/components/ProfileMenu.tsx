@@ -89,7 +89,15 @@ export function ProfileMenu() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/settings" onClick={() => closeNowPlaying()} className="cursor-pointer">
+          <Link
+            to="/settings"
+            onClick={() => {
+              if (usePlayer.getState().nowPlayingOpen) {
+                usePlayer.getState().closeNowPlaying();
+              }
+            }}
+            className="cursor-pointer"
+          >
             <Settings className="h-4 w-4 mr-2" />
             <span>Settings</span>
           </Link>

@@ -679,11 +679,11 @@ export function Player() {
         }}
       />
 
-      {/* MOBILE compact player — Spotify-style bar above the bottom tab nav */}
+      {/* MOBILE compact player — Spotify-style bar above the floating glass nav */}
       {song && (
         <div
           onClick={openNowPlaying}
-          className="md:hidden fixed left-2 right-2 bottom-18 h-14 z-40 bg-card/95 backdrop-blur-md border border-border/80 rounded-xl shadow-lg flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer"
+          className="md:hidden fixed left-3 right-3 bottom-[82px] h-14 z-40 bg-card/85 dark:bg-card/75 backdrop-blur-xl border border-border/80 dark:border-white/10 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer transition-all duration-300"
         >
           <div className="h-10 w-10 rounded-lg bg-muted shrink-0 overflow-hidden flex items-center justify-center">
             {song.thumbnail_url ? (
@@ -698,29 +698,75 @@ export function Player() {
           </div>
           <Button
             size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
-            onClick={(e) => { e.stopPropagation(); toggleQueuePanel(); }}
-            aria-label="Queue"
+            onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
+            aria-label="Previous"
+            title="Previous"
           >
-            <ListMusic className="h-5 w-5" />
-          </Button>
-          <Button
-            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
-            onClick={(e) => { e.stopPropagation(); toggleLike.mutate(); }}
-          >
-            <Heart className={isLiked ? "h-5 w-5 fill-primary text-primary" : "h-5 w-5"} />
+            <SkipBack className="h-4 w-4" />
           </Button>
           <Button
             size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground hover:bg-accent/60"
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
           </Button>
-          {/* progress hair-line */}
-          <div className="absolute left-0 right-0 bottom-0 h-1 bg-muted-foreground/15">
-            <div
-              className="h-full origin-left bg-primary transition-transform duration-150 ease-linear will-change-transform"
-              style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
-            />
+          <Button
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
+            onClick={(e) => { e.stopPropagation(); advanceToNext(); }}
+            aria-label="Next"
+            title="Next"
+          >
+            <SkipForward className="h-4 w-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
+                onClick={(e) => e.stopPropagation()}
+                title="Sleep timer"
+                aria-label="Sleep timer"
+              >
+                <Clock className={sleepTimer ? "h-4 w-4 text-primary" : "h-4 w-4"} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              {[5, 15, 30, 60].map((m) => (
+                <DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
+                  {m} minutes
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem onClick={() => setSleepTimer(null)}>Cancel timer</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-foreground/80 hover:text-foreground hover:bg-accent/60"
+            onClick={(e) => { e.stopPropagation(); toggleQueuePanel(); }}
+            aria-label="Queue"
+          >
+            <ListMusic className="h-4 w-4" />
+          </Button>
+          {/* Interactive progress scrub bar */}
+          <div
+            className="absolute left-0 right-0 bottom-0 h-3 flex items-end cursor-pointer group"
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+              const targetTime = ratio * (duration || 0);
+              commitSeek(targetTime);
+              seekCommitHaptic();
+            }}
+          >
+            <div className="w-full h-1 group-hover:h-1.5 transition-all bg-muted-foreground/20 relative">
+              <div
+                className="h-full origin-left bg-primary transition-transform duration-150 ease-linear will-change-transform"
+                style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
+              />
+            </div>
           </div>
         </div>
       )}

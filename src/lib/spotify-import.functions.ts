@@ -402,7 +402,7 @@ async function uploadToR2(
   const res = await r2.client.fetch(endpoint, {
     method: "PUT",
     headers: { "Content-Type": contentType },
-    body,
+    body: body as any,
   });
   if (!res.ok) {
     throw new Error(`R2 upload failed: ${res.status} ${await res.text()}`);

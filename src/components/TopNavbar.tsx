@@ -17,7 +17,7 @@ export function TopNavbar() {
   const nav = useNavigate();
   const { user } = useAuth();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const playSong = usePlayer((s) => s.playSong);
+  const playQueue = usePlayer((s) => s.playQueue);
   const closeNowPlaying = usePlayer((s) => s.closeNowPlaying);
   const currentSongId = usePlayer((s) => s.queue[s.currentIndex]?.id);
 
@@ -116,7 +116,8 @@ export function TopNavbar() {
   const handlePlaySong = (song: Song, all: Song[]) => {
     closeNowPlaying();
     setIsOpen(false);
-    playSong(song, all);
+    const startIdx = all.findIndex((s) => s.id === song.id);
+    playQueue(all, startIdx >= 0 ? startIdx : 0);
   };
 
   const handleOpenPlaylist = (playlistId: string) => {

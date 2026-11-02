@@ -162,17 +162,9 @@ export function Sidebar() {
         </div>
 
         <div className="border-t border-border/60 mt-2 pt-2 space-y-2">
-          {/* Legal Links Footer */}
-          <div className="px-3 pt-1 space-y-1.5 text-[11px] text-muted-foreground/80">
-            <div className="flex flex-wrap gap-x-2.5 gap-y-1 font-medium">
-              <Link to="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
-              <Link to="/terms" className="hover:text-foreground hover:underline">Terms</Link>
-              <Link to="/cookies" className="hover:text-foreground hover:underline">Cookies</Link>
-              <Link to="/data-deletion" className="hover:text-foreground hover:underline">Data controls</Link>
-            </div>
-            <div className="text-[10px] text-muted-foreground/60 leading-tight">
-              © 2026 Sonara — Music Beyond Boundaries
-            </div>
+          {/* Sidebar Footer */}
+          <div className="px-3 pt-1 text-[11px] text-muted-foreground/60 leading-tight">
+            © 2026 Sonara — Music Beyond Boundaries
           </div>
         </div>
       </div>

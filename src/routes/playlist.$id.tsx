@@ -109,7 +109,7 @@ function PlaylistPage() {
         .from("playlist_songs")
         .select("position, added_at, songs(*)")
         .eq("playlist_id", id)
-        .order("added_at", { ascending: true });
+        .order("position", { ascending: true });
       return (data ?? []).map((r: any) => r.songs as Song).filter(Boolean);
     },
   });
