@@ -131,7 +131,7 @@ export function TopNavbar() {
   };
 
   return (
-    <header className="h-16 px-4 md:px-6 flex items-center justify-between gap-4 shrink-0 bg-background/60 backdrop-blur-md z-40 select-none relative">
+    <header className="h-16 px-4 md:px-6 flex items-center justify-between gap-4 shrink-0 bg-background/60 backdrop-blur-md z-40 select-none relative pt-[env(safe-area-inset-top,0px)] box-content">
       {/* LEFT: Sonara Branding */}
       <div className="flex items-center gap-3 shrink-0">
         <Link to="/" onClick={() => closeNowPlaying()} className="flex items-center gap-2.5 group">

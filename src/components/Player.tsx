@@ -32,14 +32,6 @@ import { attachEqualizerToAudio, resumeAudioContext, useEqualizer } from "@/lib/
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListMusic } from "lucide-react";
 import {
-  isNativePlatform,
-  playNativeSong,
-  pauseNativeAudio,
-  resumeNativeAudio,
-  seekNativeAudio,
-  setNativeVolume,
-} from "@/lib/native-audio";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -246,19 +238,6 @@ export function Player() {
 
   // Audio src/play control
   useEffect(() => {
-    if (isNativePlatform) {
-      if (!song) {
-        pauseNativeAudio();
-        return;
-      }
-      if (isPlaying) {
-        playNativeSong(song, usePlayer.getState().progress || 0, muted ? 0 : volume);
-      } else {
-        pauseNativeAudio();
-      }
-      return;
-    }
-
     const audio = audioRef.current;
     if (!audio) return;
     if (!song) {
@@ -281,38 +260,31 @@ export function Player() {
     audio.autoplay = isPlaying;
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
-  }, [song?.id, song?.audio_url, isPlaying, setDuration, volume, muted]);
+  }, [song?.id, song?.audio_url, isPlaying, setDuration]);
 
   // Volume
   useEffect(() => {
-    if (isNativePlatform) {
-      setNativeVolume(muted ? 0 : volume);
-      return;
-    }
     if (audioRef.current) audioRef.current.volume = muted ? 0 : volume;
   }, [volume, muted]);
 
   // Seek
   useEffect(() => {
-    if (_seekTarget != null) {
-      if (isNativePlatform) {
-        seekNativeAudio(_seekTarget);
-        clearSeek();
-        return;
+    if (_seekTarget != null && audioRef.current) {
+      const audio = audioRef.current;
+      // Any seek source (UI bar, full-screen player, lock screen) gets the same
+      // hold window so the progress bar tracks the new position immediately.
+      seekHoldRef.current = { target: _seekTarget, until: performance.now() + 700 };
+      const readyForSeek =
+        audio.readyState >= 1 &&
+        (!Number.isFinite(audio.duration) || audio.currentSrc);
+      if (readyForSeek) {
+        seekAudio(audio, _seekTarget);
+      } else {
+        // Audio hasn't hydrated for the current song yet — queue the seek
+        // so onLoadedMetadata applies it once the correct src is buffered.
+        pendingSeekRef.current = _seekTarget;
       }
-      if (audioRef.current) {
-        const audio = audioRef.current;
-        seekHoldRef.current = { target: _seekTarget, until: performance.now() + 700 };
-        const readyForSeek =
-          audio.readyState >= 1 &&
-          (!Number.isFinite(audio.duration) || audio.currentSrc);
-        if (readyForSeek) {
-          seekAudio(audio, _seekTarget);
-        } else {
-          pendingSeekRef.current = _seekTarget;
-        }
-        clearSeek();
-      }
+      clearSeek();
     }
   }, [_seekTarget, clearSeek, seekAudio]);
 
@@ -342,9 +314,8 @@ export function Player() {
   // Background playback healer — setInterval keeps ticking (throttled to ~1Hz)
   // when the tab is hidden or the phone screen is locked, unlike rAF which pauses.
   // If audio silently stalled, resume it; if it ended without firing onEnded
-  // in background, advance to the next track (Spotify-style continuous playback). (Web/desktop only)
+  // in background, advance to the next track (Spotify-style continuous playback).
   useEffect(() => {
-    if (isNativePlatform) return;
     const id = setInterval(() => {
       const audio = audioRef.current;
       if (!audio) return;
@@ -399,9 +370,8 @@ export function Player() {
   }, [completeCurrentSong]);
 
   // Buffer the upcoming track in a second, silent element so the transition
-  // works even when the browser wakes the page late (screen unlock / locked PWA). (Web/desktop only)
+  // works even when the browser wakes the page late (screen unlock / locked PWA).
   useEffect(() => {
-    if (isNativePlatform) return;
     const upcomingIndex = usePlayer.getState().currentIndex + 1;
     const upcoming = usePlayer.getState().queue[upcomingIndex];
     if (!upcoming || prefetchedIdRef.current === upcoming.id) return;
@@ -420,9 +390,9 @@ export function Player() {
 
   // Resume/continue playback when the screen unlocks or the app becomes visible
   // again: reconcile the element with the store, restore the exact position and
-  // keep going instead of restarting or stalling. (Web/desktop only)
+  // keep going instead of restarting or stalling.
   useEffect(() => {
-    if (isNativePlatform || typeof document === "undefined") return;
+    if (typeof document === "undefined") return;
     const resync = () => {
       const audio = audioRef.current;
       if (!audio) return;
@@ -468,9 +438,9 @@ export function Player() {
     }
   }, []);
 
-  // MediaSession — lock-screen / notification controls for Web / PWA browser
+  // MediaSession — lock-screen / notification controls + reliable background playback
   useEffect(() => {
-    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!song) {
       try { navigator.mediaSession.metadata = null; } catch {}
       return;
@@ -554,9 +524,9 @@ export function Player() {
     };
   }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url, isPlaying, advanceToNext, goToPrevious, commitSeek, setProgress]);
 
-  // Keep position state up-to-date for OS scrubber (Web only)
+  // Keep position state up-to-date for OS scrubber
   useEffect(() => {
-    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!duration || !isFinite(duration)) return;
     try {
       navigator.mediaSession.setPositionState?.({
@@ -713,7 +683,7 @@ export function Player() {
       {song && (
         <div
           onClick={openNowPlaying}
-          className="md:hidden fixed left-3 right-3 bottom-[82px] h-14 z-40 bg-card/85 dark:bg-card/75 backdrop-blur-xl border border-border/80 dark:border-white/10 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer transition-all duration-300"
+          className="md:hidden fixed left-3 right-3 bottom-[calc(82px+env(safe-area-inset-bottom,0px))] h-14 z-40 bg-card/85 dark:bg-card/75 backdrop-blur-xl border border-border/80 dark:border-white/10 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer transition-all duration-300"
         >
           <div className="h-10 w-10 rounded-lg bg-muted shrink-0 overflow-hidden flex items-center justify-center">
             {song.thumbnail_url ? (

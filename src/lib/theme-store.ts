@@ -1,4 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { Capacitor } from "@capacitor/core";
+import { StatusBar, Style } from "@capacitor/status-bar";
 
 export type Theme = "light" | "dark";
 const STORAGE_KEY = "rmusics.theme";
@@ -25,6 +27,14 @@ function apply(theme: Theme) {
   if (meta) meta.setAttribute("content", theme === "dark" ? "#000000" : "#ffffff");
   const apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (apple) apple.setAttribute("content", theme === "dark" ? "black-translucent" : "default");
+
+  // Sync native mobile status bar style
+  if (Capacitor.isNativePlatform()) {
+    try {
+      StatusBar.setStyle({ style: theme === "dark" ? Style.Dark : Style.Light }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: theme === "dark" ? "#0d0b14" : "#ffffff" }).catch(() => {});
+    } catch {}
+  }
 }
 
 export function setTheme(theme: Theme) {

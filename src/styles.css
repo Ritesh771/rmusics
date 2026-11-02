@@ -301,7 +301,13 @@
   animation: gradient-x 8s ease infinite;
 }
 
-/* Global smooth transitions for interactive elements */
+/* Mobile Safe Area Inset Helpers */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 button, a { transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease; }
 
 @keyframes skeleton-shimmer {

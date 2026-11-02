@@ -85,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           ref={mainRef}
           key={pathname}
           id="main-content"
-          className="flex-1 bg-card border border-border/70 rounded-2xl overflow-y-auto pb-28 md:pb-24 shadow-xs [contain:paint]"
+          className="flex-1 bg-card border border-border/70 rounded-2xl overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-24 shadow-xs [contain:paint]"
         >
           {loading || (!user && !isPublicRoute) ? (
             <>
@@ -112,7 +112,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile floating glass bottom navigation bar */}
       <nav
         aria-label="Mobile Navigation"
-        className="md:hidden fixed bottom-3 left-4 right-4 h-16 rounded-2xl bg-background/65 dark:bg-card/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.55)] flex justify-around items-center z-50 px-2 ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300"
+        className="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] left-4 right-4 h-16 rounded-2xl bg-background/65 dark:bg-card/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.55)] flex justify-around items-center z-50 px-2 ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300"
       >
         {mobileNav.map((it) => {
           const isActive = pathname === it.to;
