@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 import androidx.activity.result.ActivityResultLauncher;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -30,6 +31,7 @@ import org.json.JSONObject;
     }
 )
 public class SonaraNativeAudioPlugin extends Plugin {
+    private static final String TAG = "SonaraPlugin";
     private SonaraAudioService audioService;
     private boolean isBound = false;
     private final List<Runnable> pendingOperations = new ArrayList<>();
@@ -170,6 +172,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
         }
 
         runWithService(() -> {
+            Log.i(TAG, "[setQueue] Received " + list.size() + " tracks from JS bridge");
             ensureServiceStarted();
             audioService.setQueue(list, startIndex, startPosition);
             call.resolve();

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SonaraAudioService extends MediaSessionService {
+    public static final String TAG = "SonaraAudio";
     public static final String CHANNEL_ID = "sonara_music_playback";
     public static final String DEFAULT_CHANNEL_ID = "default_channel_id";
 
@@ -78,6 +80,7 @@ public class SonaraAudioService extends MediaSessionService {
     @Override
     public void onCreate() {
         super.onCreate();
+        Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
         createNotificationChannels();
         initExoPlayer();
     }
@@ -87,7 +90,6 @@ public class SonaraAudioService extends MediaSessionService {
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager == null) return;
 
-            // App-specific audio channel
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Sonara Music Playback",
@@ -98,7 +100,6 @@ public class SonaraAudioService extends MediaSessionService {
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             manager.createNotificationChannel(channel);
 
-            // Default Media3 notification channel ID to ensure compatibility
             NotificationChannel defaultChannel = new NotificationChannel(
                 DEFAULT_CHANNEL_ID,
                 "Sonara Playback",
@@ -108,6 +109,8 @@ public class SonaraAudioService extends MediaSessionService {
             defaultChannel.setShowBadge(false);
             defaultChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             manager.createNotificationChannel(defaultChannel);
+
+            Log.i(TAG, "[SonaraAudioService] Notification channels created successfully: " + CHANNEL_ID + ", " + DEFAULT_CHANNEL_ID);
         }
     }
 
@@ -129,6 +132,9 @@ public class SonaraAudioService extends MediaSessionService {
             public void onMediaItemTransition(@Nullable MediaItem mediaItem, int reason) {
                 int index = player != null ? player.getCurrentMediaItemIndex() : -1;
                 TrackItem track = (index >= 0 && index < queue.size()) ? queue.get(index) : null;
+                String trackTitle = track != null ? track.title : (mediaItem != null && mediaItem.mediaMetadata.title != null ? mediaItem.mediaMetadata.title.toString() : "Unknown");
+                String uri = track != null ? track.audioUrl : (mediaItem != null && mediaItem.localConfiguration != null ? mediaItem.localConfiguration.uri.toString() : "");
+                Log.i(TAG, "[MediaItemTransition] reason=" + reason + " index=" + index + " title=\"" + trackTitle + "\" uri=" + uri);
                 if (listener != null && track != null) {
                     listener.onTrackTransition(index, track);
                 }
@@ -136,18 +142,32 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_ENDED) {
-                    if ("all".equals(repeatMode) && !queue.isEmpty() && player != null) {
-                        player.seekTo(0, 0);
-                        player.play();
-                    } else if (listener != null) {
-                        listener.onPlaybackStateChanged(false);
-                    }
+                switch (state) {
+                    case Player.STATE_IDLE:
+                        Log.i(TAG, "[PlaybackState] STATE_IDLE");
+                        break;
+                    case Player.STATE_BUFFERING:
+                        Log.i(TAG, "[PlaybackState] STATE_BUFFERING (position: " + getCurrentPosition() + "s)");
+                        break;
+                    case Player.STATE_READY:
+                        Log.i(TAG, "[PlaybackState] STATE_READY (duration: " + getDuration() + "s, isPlaying: " + (player != null && player.isPlaying()) + ")");
+                        break;
+                    case Player.STATE_ENDED:
+                        Log.i(TAG, "[PlaybackState] STATE_ENDED (currentIndex: " + getCurrentIndex() + ", repeatMode: " + repeatMode + ")");
+                        if ("all".equals(repeatMode) && !queue.isEmpty() && player != null) {
+                            Log.i(TAG, "[PlaybackState] Repeating all: seeking to track 0");
+                            player.seekTo(0, 0);
+                            player.play();
+                        } else if (listener != null) {
+                            listener.onPlaybackStateChanged(false);
+                        }
+                        break;
                 }
             }
 
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
+                Log.i(TAG, "[PlaybackState] isPlaying: " + isPlaying + " (index: " + getCurrentIndex() + ")");
                 if (listener != null) {
                     listener.onPlaybackStateChanged(isPlaying);
                 }
@@ -160,10 +180,12 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
+                Log.e(TAG, "[PlaybackError] Error code: " + error.errorCode + ", message: " + error.getMessage(), error);
                 if (listener != null) {
                     listener.onError(error.getMessage());
                 }
                 if (player != null && player.hasNextMediaItem()) {
+                    Log.i(TAG, "[PlaybackError] Recovering by advancing to next media item in queue");
                     player.seekToNextMediaItem();
                     player.prepare();
                     player.play();
@@ -183,6 +205,8 @@ public class SonaraAudioService extends MediaSessionService {
         mediaSession = new MediaSession.Builder(this, player)
             .setSessionActivity(pendingIntent)
             .build();
+
+        Log.i(TAG, "[SonaraAudioService] MediaSession built successfully with token: " + mediaSession.getToken());
     }
 
     private MediaItem buildMediaItem(TrackItem track) {
@@ -205,6 +229,7 @@ public class SonaraAudioService extends MediaSessionService {
     @Nullable
     @Override
     public MediaSession onGetSession(@NonNull MediaSession.ControllerInfo controllerInfo) {
+        Log.d(TAG, "[onGetSession] Controller connected: " + controllerInfo.getPackageName());
         return mediaSession;
     }
 
@@ -213,6 +238,7 @@ public class SonaraAudioService extends MediaSessionService {
     public IBinder onBind(Intent intent) {
         if (intent != null && intent.getAction() != null) {
             String action = intent.getAction();
+            Log.d(TAG, "[onBind] Action: " + action);
             if ("androidx.media3.session.MediaSessionService".equals(action) ||
                 "android.media.browse.MediaBrowserService".equals(action)) {
                 return super.onBind(intent);
@@ -230,11 +256,18 @@ public class SonaraAudioService extends MediaSessionService {
         queue.clear();
         queue.addAll(tracks);
 
-        if (player == null || tracks.isEmpty()) return;
+        Log.i(TAG, "[setQueue] Setting playlist of " + tracks.size() + " items into single ExoPlayer instance. startIndex=" + startIndex + ", startPos=" + startPosition);
+
+        if (player == null || tracks.isEmpty()) {
+            Log.w(TAG, "[setQueue] Player is null or tracks list is empty");
+            return;
+        }
 
         List<MediaItem> mediaItems = new ArrayList<>();
-        for (TrackItem t : tracks) {
+        for (int i = 0; i < tracks.size(); i++) {
+            TrackItem t = tracks.get(i);
             mediaItems.add(buildMediaItem(t));
+            Log.d(TAG, "  [" + i + "] id=\"" + t.id + "\" title=\"" + t.title + "\" artist=\"" + t.artist + "\" uri=" + t.audioUrl + " artUri=" + t.artworkUrl);
         }
 
         int index = Math.max(0, Math.min(startIndex, mediaItems.size() - 1));
@@ -247,14 +280,19 @@ public class SonaraAudioService extends MediaSessionService {
         player.play();
 
         TrackItem current = queue.get(index);
+        Log.i(TAG, "[setQueue] Started playback of index " + index + ": \"" + current.title + "\"");
         if (listener != null) {
             listener.onTrackTransition(index, current);
         }
     }
 
     public synchronized void playTrackAtIndex(int index, double startPosition) {
-        if (player == null || index < 0 || index >= queue.size()) return;
+        if (player == null || index < 0 || index >= queue.size()) {
+            Log.w(TAG, "[playTrackAtIndex] Invalid index: " + index + ", queue size: " + queue.size());
+            return;
+        }
         long positionMs = (long) (Math.max(0, startPosition) * 1000);
+        Log.i(TAG, "[playTrackAtIndex] Seeking to index: " + index + " at " + positionMs + "ms: \"" + queue.get(index).title + "\"");
         player.seekTo(index, positionMs);
         player.play();
 
@@ -266,6 +304,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public synchronized void next() {
         if (player == null) return;
+        Log.i(TAG, "[next] hasNextMediaItem=" + player.hasNextMediaItem() + " currentIndex=" + player.getCurrentMediaItemIndex());
         if (player.hasNextMediaItem()) {
             player.seekToNextMediaItem();
             player.play();
@@ -277,6 +316,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public synchronized void previous() {
         if (player == null) return;
+        Log.i(TAG, "[previous] currentPos=" + player.getCurrentPosition() + " hasPrevious=" + player.hasPreviousMediaItem());
         if (player.getCurrentPosition() > 3000) {
             player.seekTo(0);
             return;
@@ -294,6 +334,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void play() {
         if (player != null) {
+            Log.i(TAG, "[play] isPlaying=" + player.isPlaying() + " playbackState=" + player.getPlaybackState());
             if (player.getPlaybackState() == Player.STATE_ENDED) {
                 player.seekTo(0, 0);
             }
@@ -303,6 +344,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void pause() {
         if (player != null) {
+            Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s");
             player.pause();
         }
     }
@@ -310,7 +352,7 @@ public class SonaraAudioService extends MediaSessionService {
     public void togglePlay() {
         if (player != null) {
             if (player.isPlaying()) {
-                player.pause();
+                pause();
             } else {
                 play();
             }
@@ -319,12 +361,14 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void seekTo(double seconds) {
         if (player != null) {
+            Log.i(TAG, "[seekTo] Seeking to " + seconds + "s");
             player.seekTo((long) (seconds * 1000));
         }
     }
 
     public void setRepeatMode(String mode) {
         this.repeatMode = mode;
+        Log.i(TAG, "[setRepeatMode] " + mode);
         applyRepeatMode();
     }
 
@@ -341,6 +385,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void setShuffle(boolean shuffle) {
         this.isShuffle = shuffle;
+        Log.i(TAG, "[setShuffle] " + shuffle);
         applyShuffleMode();
     }
 
@@ -402,6 +447,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        Log.i(TAG, "[SonaraAudioService] onDestroy: releasing ExoPlayer and MediaSession");
         stopProgressTracking();
         if (mediaSession != null) {
             mediaSession.release();
