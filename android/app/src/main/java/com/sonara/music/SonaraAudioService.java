@@ -278,6 +278,9 @@ public class SonaraAudioService extends MediaSessionService {
         applyShuffleMode();
         player.prepare();
         player.play();
+        try {
+            startService(new Intent(this, SonaraAudioService.class));
+        } catch (Exception ignored) {}
 
         TrackItem current = queue.get(index);
         Log.i(TAG, "[setQueue] Started playback of index " + index + ": \"" + current.title + "\"");
@@ -339,6 +342,9 @@ public class SonaraAudioService extends MediaSessionService {
                 player.seekTo(0, 0);
             }
             player.play();
+            try {
+                startService(new Intent(this, SonaraAudioService.class));
+            } catch (Exception ignored) {}
         }
     }
 
