@@ -693,7 +693,7 @@ export function Player() {
       />
 
       {/* MOBILE compact player — Spotify-style bar above the floating glass nav */}
-      {song && (
+      {!nowPlayingOpen && song && (
         <div
           onClick={openNowPlaying}
           className="md:hidden fixed left-3 right-3 bottom-[calc(82px+env(safe-area-inset-bottom,0px))] h-14 z-40 bg-card/85 dark:bg-card/75 backdrop-blur-xl border border-border/80 dark:border-white/10 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 flex items-center gap-2 pl-2 pr-3 overflow-hidden cursor-pointer transition-all duration-300"
@@ -761,9 +761,53 @@ export function Player() {
           >
             <ListMusic className="h-4 w-4" />
           </Button>
-          {/* Interactive progress scrub bar */}
+          {/* Interactive progress scrub bar with full slide / drag support for mobile & desktop */}
           <div
-            className="absolute left-0 right-0 bottom-0 h-3 flex items-end cursor-pointer group"
+            className="absolute left-0 right-0 bottom-0 h-4 flex items-end cursor-pointer group touch-none select-none z-20"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              try {
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              } catch {}
+              scrubbingRef.current = true;
+              setScrubbing(true);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+              const targetTime = ratio * (duration || 0);
+              setScrubValue(targetTime);
+              seekTouchHaptic();
+            }}
+            onPointerMove={(e) => {
+              if (!scrubbingRef.current) return;
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+              const targetTime = ratio * (duration || 0);
+              setScrubValue(targetTime);
+              seekDragHaptic(targetTime);
+            }}
+            onPointerUp={(e) => {
+              if (!scrubbingRef.current) return;
+              e.stopPropagation();
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+              const targetTime = ratio * (duration || 0);
+              commitSeek(targetTime);
+              seekCommitHaptic();
+              scrubbingRef.current = false;
+              setScrubbing(false);
+            }}
+            onPointerCancel={(e) => {
+              e.stopPropagation();
+              scrubbingRef.current = false;
+              setScrubbing(false);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
@@ -774,12 +818,39 @@ export function Player() {
               seekCommitHaptic();
             }}
           >
-            <div className="w-full h-1 group-hover:h-1.5 transition-all bg-muted-foreground/20 relative">
-              <div
-                className="h-full origin-left bg-primary transition-transform duration-150 ease-linear will-change-transform"
-                style={{ transform: `scaleX(${duration ? Math.min(progress / duration, 1) : 0})` }}
-              />
-            </div>
+            {(() => {
+              const displayVal = scrubbing ? scrubValue : progress;
+              const ratio = duration > 0 ? Math.max(0, Math.min(1, displayVal / duration)) : 0;
+              return (
+                <div className={cn(
+                  "w-full transition-all bg-muted-foreground/20 relative",
+                  scrubbing ? "h-2 bg-muted-foreground/35" : "h-1 group-hover:h-1.5"
+                )}>
+                  {/* Progress fill */}
+                  <div
+                    className="h-full origin-left bg-primary transition-transform duration-75 ease-linear will-change-transform"
+                    style={{ transform: `scaleX(${ratio})` }}
+                  />
+                  {/* Scrub thumb handle */}
+                  <div
+                    className={cn(
+                      "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-primary border-2 border-background shadow-md transition-opacity pointer-events-none",
+                      scrubbing ? "opacity-100 scale-110" : "opacity-0 group-hover:opacity-100"
+                    )}
+                    style={{ left: `${ratio * 100}%` }}
+                  />
+                  {/* Scrub time tooltip */}
+                  {scrubbing && (
+                    <div
+                      className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-foreground text-background text-[10px] font-bold shadow-lg pointer-events-none whitespace-nowrap"
+                      style={{ left: `${ratio * 100}%` }}
+                    >
+                      {formatDuration(scrubValue)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
