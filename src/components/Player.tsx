@@ -152,17 +152,24 @@ export function Player() {
       // continue as soon as the next response is ready, even while mobile
       // browsers heavily throttle page JavaScript in the background.
       audio.autoplay = true;
+      errorRetryRef.current = 0;
       if (audio.dataset.songId !== targetSong.id) {
         // Cover slow networks and background src swaps — otherwise the natural
         // "pause" event fired by src replacement flips isPlaying to false.
         suppressPauseUntil.current = Date.now() + 15000;
         audio.dataset.songId = targetSong.id;
         audio.src = streamUrl(targetSong.audio_url);
+        // Queue the seek via pendingSeekRef so onLoadedMetadata applies it
+        // AFTER the new source is ready. Calling seekAudio() before load()
+        // on an ended element can fire a spurious pause/ended event on the
+        // old source and re-enter completeCurrentSong incorrectly.
+        pendingSeekRef.current = seekTo;
         audio.load();
+      } else {
+        // Same song — seek immediately (no src swap, no spurious events).
+        pendingSeekRef.current = null;
+        seekAudio(audio, seekTo);
       }
-      pendingSeekRef.current = null;
-      errorRetryRef.current = 0;
-      seekAudio(audio, seekTo);
       audio
         .play()
         .then(() => {
@@ -207,6 +214,9 @@ export function Player() {
     const upcoming = state.next();
     if (upcoming) {
       try { navigator.mediaSession.playbackState = "playing"; } catch {}
+      // Arm suppress BEFORE playAudioSong so the pause event fired by the
+      // old src being replaced doesn't slip through and set isPlaying=false.
+      suppressPauseUntil.current = Date.now() + 15000;
       playAudioSong(upcoming, 0);
     }
   }, [playAudioSong, seekAudio]);
@@ -611,6 +621,11 @@ export function Player() {
         }}
         onPause={() => {
           const audio = audioRef.current;
+          // Suppress-window check MUST come first: a src swap fires a pause
+          // event while audio.currentTime is still near the end of the OLD
+          // track — without this guard we'd call completeCurrentSong() again
+          // on the already-completed song and the new track would never start.
+          if (Date.now() < suppressPauseUntil.current) return;
           // Safari can deliver the terminal pause while delaying/suppressing
           // `ended` after screen lock. Treat a pause at the media boundary as
           // native completion so the next source is installed immediately.
@@ -618,7 +633,6 @@ export function Player() {
             completeCurrentSong();
             return;
           }
-          if (Date.now() < suppressPauseUntil.current) return;
           if (audioRef.current) audioRef.current.autoplay = false;
           usePlayer.setState({ isPlaying: false });
           if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
