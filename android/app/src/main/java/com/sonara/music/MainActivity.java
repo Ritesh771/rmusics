@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SonaraNativeAudioPlugin.class);
         super.onCreate(savedInstanceState);
         requestNotificationPermission();
         enableBackgroundPlayback();

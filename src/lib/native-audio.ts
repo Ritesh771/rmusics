@@ -51,6 +51,11 @@ export const SonaraNativeAudio = registerPlugin<SonaraNativeAudioPlugin>("Sonara
 export const isNativePlatform = Capacitor.isNativePlatform();
 
 let isInitialized = false;
+let trackChangeListener: ((songId: string, index: number) => void) | null = null;
+
+export function setNativeTrackChangeListener(fn: (songId: string, index: number) => void) {
+  trackChangeListener = fn;
+}
 
 function mapSongToNative(song: Song): NativeTrack {
   return {
@@ -75,10 +80,14 @@ export async function initNativeAudioBridge() {
     // Listen for native track completions and queue advances (running in ExoPlayer service)
     await SonaraNativeAudio.addListener("trackTransition", ({ index, song }) => {
       const state = usePlayer.getState();
-      if (index >= 0 && index < state.queue.length) {
+      const currentTrack = state.queue[index] || song;
+      if (currentTrack) {
+        if (trackChangeListener) {
+          trackChangeListener(currentTrack.id, index);
+        }
         usePlayer.setState({
           currentIndex: index,
-          duration: state.queue[index]?.duration || (song?.duration ?? 0),
+          duration: currentTrack.duration || (song?.duration ?? 0),
           progress: 0,
           isPlaying: true,
         });

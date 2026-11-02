@@ -1,0 +1,317 @@
+package com.sonara.music;
+
+import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.os.Build;
+import android.os.IBinder;
+import androidx.activity.result.ActivityResultLauncher;
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+@CapacitorPlugin(
+    name = "SonaraNativeAudio",
+    permissions = {
+        @Permission(
+            alias = "notifications",
+            strings = { Manifest.permission.POST_NOTIFICATIONS }
+        )
+    }
+)
+public class SonaraNativeAudioPlugin extends Plugin {
+    private SonaraAudioService audioService;
+    private boolean isBound = false;
+    private final List<Runnable> pendingOperations = new ArrayList<>();
+
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            SonaraAudioService.LocalBinder localBinder = (SonaraAudioService.LocalBinder) binder;
+            audioService = localBinder.getService();
+            isBound = true;
+            setupServiceListener();
+
+            synchronized (pendingOperations) {
+                for (Runnable op : pendingOperations) {
+                    op.run();
+                }
+                pendingOperations.clear();
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            audioService = null;
+            isBound = false;
+        }
+    };
+
+    @Override
+    public void load() {
+        super.load();
+        bindAudioService();
+    }
+
+    private void bindAudioService() {
+        Context context = getContext();
+        if (context == null) return;
+        Intent intent = new Intent(context, SonaraAudioService.class);
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+    }
+
+    private void ensureServiceStarted() {
+        Context context = getContext();
+        if (context == null) return;
+        Intent intent = new Intent(context, SonaraAudioService.class);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void setupServiceListener() {
+        if (audioService == null) return;
+        audioService.setListener(new SonaraAudioService.ServiceListener() {
+            @Override
+            public void onTrackTransition(int index, SonaraAudioService.TrackItem track) {
+                JSObject ret = new JSObject();
+                ret.put("index", index);
+                if (track != null) {
+                    JSObject s = new JSObject();
+                    s.put("id", track.id);
+                    s.put("title", track.title);
+                    s.put("artist", track.artist);
+                    s.put("album", track.album);
+                    s.put("audio_url", track.audioUrl);
+                    s.put("thumbnail_url", track.artworkUrl);
+                    s.put("duration", track.duration);
+                    ret.put("song", s);
+                }
+                notifyListeners("trackTransition", ret);
+            }
+
+            @Override
+            public void onPlaybackStateChanged(boolean isPlaying) {
+                JSObject ret = new JSObject();
+                ret.put("isPlaying", isPlaying);
+                notifyListeners("playbackState", ret);
+            }
+
+            @Override
+            public void onProgressUpdated(double position, double duration) {
+                JSObject ret = new JSObject();
+                ret.put("position", position);
+                ret.put("duration", duration);
+                notifyListeners("progress", ret);
+            }
+
+            @Override
+            public void onError(String message) {
+                JSObject ret = new JSObject();
+                ret.put("message", message);
+                notifyListeners("error", ret);
+            }
+        });
+    }
+
+    private void runWithService(Runnable op) {
+        if (isBound && audioService != null) {
+            op.run();
+        } else {
+            synchronized (pendingOperations) {
+                pendingOperations.add(op);
+            }
+            bindAudioService();
+        }
+    }
+
+    @PluginMethod
+    public void setQueue(PluginCall call) {
+        JSArray tracksArray = call.getArray("tracks");
+        int startIndex = call.getInt("startIndex", 0);
+        double startPosition = call.getDouble("startPosition", 0.0);
+
+        if (tracksArray == null) {
+            call.reject("Must provide tracks array");
+            return;
+        }
+
+        List<SonaraAudioService.TrackItem> list = new ArrayList<>();
+        try {
+            for (int i = 0; i < tracksArray.length(); i++) {
+                JSONObject obj = tracksArray.getJSONObject(i);
+                list.add(new SonaraAudioService.TrackItem(
+                    obj.optString("id", ""),
+                    obj.optString("title", "Unknown"),
+                    obj.optString("artist", "Unknown"),
+                    obj.optString("album", ""),
+                    obj.optString("audio_url", ""),
+                    obj.optString("thumbnail_url", ""),
+                    obj.optDouble("duration", 0.0)
+                ));
+            }
+        } catch (Exception e) {
+            call.reject("Error parsing tracks: " + e.getMessage());
+            return;
+        }
+
+        runWithService(() -> {
+            ensureServiceStarted();
+            audioService.setQueue(list, startIndex, startPosition);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void playSong(PluginCall call) {
+        JSObject songObj = call.getObject("song");
+        double startTime = call.getDouble("startTime", 0.0);
+        if (songObj == null) {
+            call.reject("Must provide song");
+            return;
+        }
+
+        SonaraAudioService.TrackItem track = new SonaraAudioService.TrackItem(
+            songObj.optString("id", ""),
+            songObj.optString("title", "Unknown"),
+            songObj.optString("artist", "Unknown"),
+            songObj.optString("album", ""),
+            songObj.optString("audio_url", ""),
+            songObj.optString("thumbnail_url", ""),
+            songObj.optDouble("duration", 0.0)
+        );
+
+        List<SonaraAudioService.TrackItem> singleList = new ArrayList<>();
+        singleList.add(track);
+
+        runWithService(() -> {
+            audioService.setQueue(singleList, 0, startTime);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void togglePlay(PluginCall call) {
+        runWithService(() -> {
+            audioService.togglePlay();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void pause(PluginCall call) {
+        runWithService(() -> {
+            audioService.pause();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void resume(PluginCall call) {
+        runWithService(() -> {
+            audioService.play();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void next(PluginCall call) {
+        runWithService(() -> {
+            audioService.next();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void prev(PluginCall call) {
+        runWithService(() -> {
+            audioService.previous();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void seek(PluginCall call) {
+        double time = call.getDouble("time", 0.0);
+        runWithService(() -> {
+            audioService.seekTo(time);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void setRepeat(PluginCall call) {
+        String repeat = call.getString("repeat", "off");
+        runWithService(() -> {
+            audioService.setRepeatMode(repeat);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void setShuffle(PluginCall call) {
+        boolean shuffle = call.getBoolean("shuffle", false);
+        runWithService(() -> {
+            audioService.setShuffle(shuffle);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void getState(PluginCall call) {
+        runWithService(() -> {
+            JSObject ret = new JSObject();
+            ret.put("isPlaying", audioService.isPlaying());
+            ret.put("position", audioService.getCurrentPosition());
+            ret.put("duration", audioService.getDuration());
+            ret.put("currentIndex", audioService.getCurrentIndex());
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (!hasPermission("notifications")) {
+                requestPermissionForAlias("notifications", call, "permissionCallback");
+                return;
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("granted", true);
+        call.resolve(ret);
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private void permissionCallback(PluginCall call) {
+        boolean granted = hasPermission("notifications");
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (isBound) {
+            try {
+                getContext().unbindService(serviceConnection);
+            } catch (Exception ignored) {}
+            isBound = false;
+        }
+        super.handleOnDestroy();
+    }
+}

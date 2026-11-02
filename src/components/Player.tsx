@@ -14,6 +14,7 @@ import {
   seekNativeAudio,
   setRepeatNativeAudio,
   setShuffleNativeAudio,
+  setNativeTrackChangeListener,
 } from "@/lib/native-audio";
 import {
   Play,
@@ -268,13 +269,18 @@ export function Player() {
   }, [setProgress]);
 
   // Native ExoPlayer lifecycle & synchronization
+  const lastNativeSongId = useRef<string | null>(null);
+
   useEffect(() => {
-    if (isNativePlatform) {
-      initNativeAudioBridge();
-    }
+    if (!isNativePlatform) return;
+    initNativeAudioBridge();
+    setNativeTrackChangeListener((songId) => {
+      // Keep track of the native service track transition so the effect below
+      // does not echo back and re-set the queue when a track ends naturally.
+      lastNativeSongId.current = songId;
+    });
   }, []);
 
-  const lastNativeSongId = useRef<string | null>(null);
   useEffect(() => {
     if (!isNativePlatform) return;
     if (!song) {
@@ -282,21 +288,19 @@ export function Player() {
       lastNativeSongId.current = null;
       return;
     }
-    if (lastNativeSongId.current !== song.id) {
-      lastNativeSongId.current = song.id;
-      const state = usePlayer.getState();
-      playQueueNative(state.queue, state.currentIndex, state.progress || 0);
-    }
-  }, [song?.id]);
 
-  useEffect(() => {
-    if (!isNativePlatform) return;
     if (isPlaying) {
-      resumeNativeAudio();
+      if (lastNativeSongId.current !== song.id) {
+        lastNativeSongId.current = song.id;
+        const state = usePlayer.getState();
+        playQueueNative(state.queue, state.currentIndex, state.progress || 0);
+      } else {
+        resumeNativeAudio();
+      }
     } else {
       pauseNativeAudio();
     }
-  }, [isPlaying]);
+  }, [song?.id, isPlaying]);
 
   useEffect(() => {
     if (!isNativePlatform) return;
