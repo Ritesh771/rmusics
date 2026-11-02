@@ -2,6 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlayer, type Song } from "@/lib/player-store";
 import { cn } from "@/lib/utils";
 import {
+  isNativePlatform,
+  initNativeAudioBridge,
+  playQueueNative,
+  playNativeSong,
+  togglePlayNative,
+  pauseNativeAudio,
+  resumeNativeAudio,
+  nextNativeAudio,
+  prevNativeAudio,
+  seekNativeAudio,
+  setRepeatNativeAudio,
+  setShuffleNativeAudio,
+} from "@/lib/native-audio";
+import {
   Play,
   Pause,
   SkipBack,
@@ -92,15 +106,18 @@ export function Player() {
       const state = usePlayer.getState();
       const max = state.duration || Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, max));
-      // Immediately set the HTML audio currentTime for zero-lag forward/backward
-      const audio = audioRef.current;
-      if (audio) {
-        try {
-          audio.currentTime = target;
-          if (state.isPlaying && audio.paused) {
-            audio.play().catch(() => {});
-          }
-        } catch {}
+      if (isNativePlatform) {
+        seekNativeAudio(target);
+      } else {
+        const audio = audioRef.current;
+        if (audio) {
+          try {
+            audio.currentTime = target;
+            if (state.isPlaying && audio.paused) {
+              audio.play().catch(() => {});
+            }
+          } catch {}
+        }
       }
       seekHoldRef.current = { target, until: performance.now() + 300 };
       setProgress(target);
@@ -182,6 +199,10 @@ export function Player() {
   );
 
   const advanceToNext = useCallback(() => {
+    if (isNativePlatform) {
+      nextNativeAudio();
+      return;
+    }
     const upcoming = next();
     if (upcoming) playAudioSong(upcoming, 0);
   }, [next, playAudioSong]);
@@ -215,6 +236,10 @@ export function Player() {
   }, [playAudioSong, seekAudio]);
 
   const goToPrevious = useCallback(() => {
+    if (isNativePlatform) {
+      prevNativeAudio();
+      return;
+    }
     const previous = prev();
     if (previous) playAudioSong(previous, 0);
   }, [prev, playAudioSong]);
@@ -242,8 +267,50 @@ export function Player() {
     }
   }, [setProgress]);
 
-  // Audio src/play control
+  // Native ExoPlayer lifecycle & synchronization
   useEffect(() => {
+    if (isNativePlatform) {
+      initNativeAudioBridge();
+    }
+  }, []);
+
+  const lastNativeSongId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isNativePlatform) return;
+    if (!song) {
+      pauseNativeAudio();
+      lastNativeSongId.current = null;
+      return;
+    }
+    if (lastNativeSongId.current !== song.id) {
+      lastNativeSongId.current = song.id;
+      const state = usePlayer.getState();
+      playQueueNative(state.queue, state.currentIndex, state.progress || 0);
+    }
+  }, [song?.id]);
+
+  useEffect(() => {
+    if (!isNativePlatform) return;
+    if (isPlaying) {
+      resumeNativeAudio();
+    } else {
+      pauseNativeAudio();
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!isNativePlatform) return;
+    setRepeatNativeAudio(repeat);
+  }, [repeat]);
+
+  useEffect(() => {
+    if (!isNativePlatform) return;
+    setShuffleNativeAudio(shuffle);
+  }, [shuffle]);
+
+  // Audio src/play control (Web / PWA browser only — Native uses ExoPlayer service)
+  useEffect(() => {
+    if (isNativePlatform) return;
     const audio = audioRef.current;
     if (!audio) return;
     if (!song) {
@@ -290,9 +357,9 @@ export function Player() {
     }
   }, [_seekTarget, clearSeek, seekAudio]);
 
-  // Smooth progress via rAF — avoids the choppy ~4Hz timeupdate event
+  // Smooth progress via rAF — avoids the choppy ~4Hz timeupdate event (Web only)
   useEffect(() => {
-    if (!isPlaying) return;
+    if (isNativePlatform || !isPlaying) return;
     let raf = 0;
     const tick = () => {
       publishAudioTime();
@@ -313,11 +380,9 @@ export function Player() {
     return () => clearInterval(id);
   }, [sleepTimer]);
 
-  // Background playback healer — setInterval keeps ticking (throttled to ~1Hz)
-  // when the tab is hidden or the phone screen is locked, unlike rAF which pauses.
-  // If audio silently stalled, resume it; if it ended without firing onEnded
-  // in background, advance to the next track (Spotify-style continuous playback).
+  // Background playback healer — Web only (Native uses ExoPlayer service)
   useEffect(() => {
+    if (isNativePlatform) return;
     const id = setInterval(() => {
       const audio = audioRef.current;
       if (!audio) return;
@@ -360,20 +425,19 @@ export function Player() {
     return () => clearInterval(id);
   }, [completeCurrentSong, setProgress, ensurePlaying]);
 
-  // Attach the completion handler directly to the media element. Native media
-  // listeners are the most reliable wake-up path on iOS/Android when React and
-  // normal timers are suspended after the screen locks.
+  // Attach the completion handler directly to the media element (Web only)
   useEffect(() => {
+    if (isNativePlatform) return;
     const audio = audioRef.current;
     if (!audio) return;
-      const onEnded = () => completeCurrentSong();
+    const onEnded = () => completeCurrentSong();
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
   }, [completeCurrentSong]);
 
-  // Buffer the upcoming track in a second, silent element so the transition
-  // works even when the browser wakes the page late (screen unlock / locked PWA).
+  // Buffer upcoming track in silent element (Web only)
   useEffect(() => {
+    if (isNativePlatform) return;
     const upcomingIndex = usePlayer.getState().currentIndex + 1;
     const upcoming = usePlayer.getState().queue[upcomingIndex];
     if (!upcoming || prefetchedIdRef.current === upcoming.id) return;
@@ -390,11 +454,9 @@ export function Player() {
     try { el.load(); } catch {}
   }, [song?.id]);
 
-  // Resume/continue playback when the screen unlocks or the app becomes visible
-  // again: reconcile the element with the store, restore the exact position and
-  // keep going instead of restarting or stalling.
+  // Resync on visibilitychange (Web only)
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    if (isNativePlatform || typeof document === "undefined") return;
     const resync = () => {
       const audio = audioRef.current;
       if (!audio) return;
@@ -402,7 +464,6 @@ export function Player() {
       const state = usePlayer.getState();
       const currentSong = state.queue[state.currentIndex];
       if (!currentSong) return;
-      // The audio element drifted onto a different (or no) source while hidden.
       if (audio.dataset.songId !== currentSong.id || !audio.currentSrc) {
         suppressPauseUntil.current = Date.now() + 5000;
         audio.dataset.songId = currentSong.id;
@@ -412,7 +473,6 @@ export function Player() {
         if (state.isPlaying) ensurePlaying(0);
         return;
       }
-      // Track finished while the screen was locked but nothing advanced.
       const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
       if (audio.ended || (dur > 0 && audio.currentTime >= dur - 0.3 && audio.paused)) {
         completeCurrentSong();
@@ -440,10 +500,9 @@ export function Player() {
     }
   }, []);
 
-  // MediaSession persistent action handlers — registered ONCE and never torn down
-  // so Android OS never removes the lock-screen player / media notification.
+  // Web MediaSession (Web only — Native uses ExoPlayer MediaSessionService)
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
     const safe = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
       try {
@@ -519,9 +578,9 @@ export function Player() {
     };
   }, [playAudioSong, commitSeek, setProgress]);
 
-  // MediaSession Metadata — updates lock screen with current track info & artwork
+  // MediaSession Metadata — updates lock screen with current track info & artwork (Web only)
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!song) {
       try { navigator.mediaSession.metadata = null; } catch {}
       return;
@@ -540,7 +599,6 @@ export function Player() {
           : [],
       });
     } catch {
-      // Fallback without artwork if browser rejects remote format
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: song.title,
@@ -551,17 +609,17 @@ export function Player() {
     }
   }, [song?.id, song?.title, song?.artist, song?.album, song?.thumbnail_url]);
 
-  // MediaSession PlaybackState sync
+  // MediaSession PlaybackState sync (Web only)
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     try {
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
     } catch {}
   }, [isPlaying]);
 
-  // Keep position state up-to-date for OS scrubber
+  // Keep position state up-to-date for OS scrubber (Web only)
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (isNativePlatform || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!duration || !isFinite(duration)) return;
     try {
       navigator.mediaSession.setPositionState?.({
@@ -595,8 +653,9 @@ export function Player() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked"] }),
   });
 
-  // Attach equalizer only if the user explicitly enabled it
+  // Attach equalizer only if the user explicitly enabled it (Web only)
   useEffect(() => {
+    if (isNativePlatform) return;
     if (audioRef.current) {
       if (useEqualizer.getState().enabled) {
         attachEqualizerToAudio(audioRef.current);
@@ -604,8 +663,9 @@ export function Player() {
     }
   }, []);
 
-  // Listen for EQ enable toggle from Settings to attach dynamically
+  // Listen for EQ enable toggle from Settings to attach dynamically (Web only)
   useEffect(() => {
+    if (isNativePlatform) return;
     return useEqualizer.subscribe((state, prevState) => {
       if (state.enabled && !prevState.enabled && audioRef.current) {
         attachEqualizerToAudio(audioRef.current);
@@ -615,11 +675,12 @@ export function Player() {
 
   return (
     <>
-      <audio
-        ref={audioRef}
-        preload="auto"
-        playsInline
-        crossOrigin="anonymous"
+      {!isNativePlatform && (
+        <audio
+          ref={audioRef}
+          preload="auto"
+          playsInline
+          crossOrigin="anonymous"
         onLoadedMetadata={(e) => {
           const audio = e.currentTarget;
           const loadedSong = usePlayer.getState().currentSong();
@@ -725,6 +786,7 @@ export function Player() {
           if (usePlayer.getState().isPlaying && audio.paused) audio.play().catch(() => {});
         }}
       />
+      )}
 
       {/* MOBILE compact player — Spotify-style bar above the floating glass nav */}
       {!nowPlayingOpen && song && (
