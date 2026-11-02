@@ -8,11 +8,12 @@ const config: CapacitorConfig = {
   // to ensure all Nitro SSR endpoints, Cloudflare R2 streaming, and Spotify
   // sync work identically, while local native plugins provide audio & haptics.
   server: {
-    url: "https://rmusics.lovable.app",
+    url: "https://sonaramusics.vercel.app",
     cleartext: false,
     androidScheme: "https",
     iosScheme: "https",
     allowNavigation: [
+      "https://sonaramusics.vercel.app",
       "https://rmusics.lovable.app",
       "https://*.supabase.co",
       "https://*.r2.cloudflarestorage.com",

@@ -24,6 +24,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-hook";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — Sonara" }] }),
@@ -141,20 +143,36 @@ function LoginPage() {
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
+      const isNative = Capacitor.isNativePlatform();
       const redirectPath = getRedirectPath();
-      const redirectUrl = redirectPath !== "/"
-        ? `${window.location.origin}${redirectPath}`
-        : window.location.origin;
+      
+      // Native apps redirect back using custom deep link scheme
+      const redirectUrl = isNative
+        ? "com.sonara.music://auth/callback"
+        : (redirectPath !== "/"
+            ? `${window.location.origin}${redirectPath}`
+            : window.location.origin);
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: redirectUrl,
+          skipBrowserRedirect: isNative,
         },
       });
+
       if (error) {
         toast.error(error.message ?? "Google sign-in failed");
         setBusy(false);
+        return;
+      }
+
+      // If running on Android or iOS native app, open OAuth URL via in-app browser tab
+      if (isNative && data?.url) {
+        await Browser.open({
+          url: data.url,
+          windowName: "_self",
+        });
       }
     } catch (err: any) {
       toast.error(err?.message ?? "An error occurred during authentication");

@@ -22,6 +22,19 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.sonara.music</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.sonara.music</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -73,6 +86,7 @@
 	</array>
 	<key>WKAppBoundDomains</key>
 	<array>
+		<string>sonaramusics.vercel.app</string>
 		<string>rmusics.lovable.app</string>
 		<string>supabase.co</string>
 		<string>r2.cloudflarestorage.com</string>
