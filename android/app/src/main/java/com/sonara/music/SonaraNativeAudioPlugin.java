@@ -79,6 +79,11 @@ public class SonaraNativeAudioPlugin extends Plugin {
         if (context == null) return;
         try {
             Intent intent = new Intent(context, SonaraAudioService.class);
+            try {
+                context.startService(intent);
+            } catch (Throwable t) {
+                Log.w(TAG, "startService notice: " + t.getMessage());
+            }
             context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "Error binding audio service", e);

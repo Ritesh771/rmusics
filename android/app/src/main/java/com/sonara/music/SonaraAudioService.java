@@ -174,8 +174,12 @@ public class SonaraAudioService extends MediaSessionService {
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build();
+
+        Log.i(TAG, "[initExoPlayer] Player initialized. appLooper=" + player.getApplicationLooper().getThread().getName()
+            + " currentLooper=" + (Looper.myLooper() != null ? Looper.myLooper().getThread().getName() : "null")
+            + " wakeMode=WAKE_MODE_NETWORK");
 
         player.addListener(new Player.Listener() {
             @Override
@@ -184,7 +188,11 @@ public class SonaraAudioService extends MediaSessionService {
                 TrackItem track = (index >= 0 && index < queue.size()) ? queue.get(index) : null;
                 String trackTitle = track != null ? track.title : (mediaItem != null && mediaItem.mediaMetadata.title != null ? mediaItem.mediaMetadata.title.toString() : "Unknown");
                 String uri = track != null ? track.audioUrl : (mediaItem != null && mediaItem.localConfiguration != null ? mediaItem.localConfiguration.uri.toString() : "");
-                Log.i(TAG, "[MediaItemTransition] reason=" + reason + " index=" + index + " title=\"" + trackTitle + "\" uri=" + uri);
+                String reasonStr = (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) ? "AUTO" :
+                                   (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) ? "SEEK" :
+                                   (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) ? "REPEAT" : "PLAYLIST_CHANGED";
+                Log.i(TAG, "[MediaItemTransition] reason=" + reasonStr + " (" + reason + ") index=" + index + " title=\"" + trackTitle + "\" uri=" + uri
+                    + " isPlaying=" + (player != null && player.isPlaying()) + " playWhenReady=" + (player != null && player.getPlayWhenReady()));
                 if (listener != null && track != null) {
                     listener.onTrackTransition(index, track);
                 }
@@ -192,21 +200,24 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onPlaybackStateChanged(int state) {
+                String stateStr = (state == Player.STATE_IDLE) ? "STATE_IDLE" :
+                                  (state == Player.STATE_BUFFERING) ? "STATE_BUFFERING" :
+                                  (state == Player.STATE_READY) ? "STATE_READY" : "STATE_ENDED";
+                Log.i(TAG, "[PlaybackState] " + stateStr + " (pos: " + getCurrentPosition() + "s, dur: " + getDuration() + "s, isPlaying: "
+                    + (player != null && player.isPlaying()) + ", playWhenReady: " + (player != null && player.getPlayWhenReady())
+                    + ", suppression: " + (player != null ? player.getPlaybackSuppressionReason() : -1) + ")");
                 switch (state) {
                     case Player.STATE_IDLE:
-                        Log.i(TAG, "[PlaybackState] STATE_IDLE");
                         break;
                     case Player.STATE_BUFFERING:
-                        Log.i(TAG, "[PlaybackState] STATE_BUFFERING (position: " + getCurrentPosition() + "s)");
                         break;
                     case Player.STATE_READY:
-                        Log.i(TAG, "[PlaybackState] STATE_READY (duration: " + getDuration() + "s, isPlaying: " + (player != null && player.isPlaying()) + ")");
                         if (player != null && player.getPlayWhenReady()) {
                             startProgressTracking();
                         }
                         break;
                     case Player.STATE_ENDED:
-                        Log.i(TAG, "[PlaybackState] STATE_ENDED (currentIndex: " + getCurrentIndex() + ", repeatMode: " + repeatMode + ")");
+                        Log.i(TAG, "[PlaybackState] Track natural end reached. currentIndex: " + getCurrentIndex() + ", repeatMode: " + repeatMode);
                         if ("all".equals(repeatMode) && !queue.isEmpty() && player != null) {
                             Log.i(TAG, "[PlaybackState] Repeating all: seeking to track 0");
                             player.seekTo(0, 0);
@@ -221,7 +232,9 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
-                Log.i(TAG, "[PlaybackState] isPlaying: " + isPlaying + " (index: " + getCurrentIndex() + ")");
+                Log.i(TAG, "[onIsPlayingChanged] isPlaying=" + isPlaying + " (index: " + getCurrentIndex()
+                    + ", pos: " + getCurrentPosition() + "s, playWhenReady=" + (player != null && player.getPlayWhenReady())
+                    + ", suppression=" + (player != null ? player.getPlaybackSuppressionReason() : -1) + ")");
                 if (isPlaying) {
                     startProgressTracking();
                 } else {
@@ -231,15 +244,27 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
-                Log.i(TAG, "[PlaybackState] onPlayWhenReadyChanged: " + playWhenReady + " reason=" + reason);
+                String reasonStr = (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) ? "USER_REQUEST" :
+                                   (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS) ? "AUDIO_FOCUS_LOSS" :
+                                   (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) ? "AUDIO_BECOMING_NOISY" :
+                                   (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE) ? "REMOTE" : "END_OF_MEDIA_ITEM";
+                Log.i(TAG, "[onPlayWhenReadyChanged] playWhenReady=" + playWhenReady + " reason=" + reasonStr + " (" + reason + ")");
                 if (listener != null) {
                     listener.onPlaybackStateChanged(playWhenReady);
                 }
             }
 
             @Override
+            public void onPlaybackSuppressionReasonChanged(int suppressionReason) {
+                String reasonStr = (suppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE) ? "NONE" :
+                                   (suppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS) ? "TRANSIENT_AUDIO_FOCUS_LOSS" :
+                                   "UNSUITABLE_AUDIO_OUTPUT";
+                Log.w(TAG, "[onPlaybackSuppressionReasonChanged] suppressionReason=" + reasonStr + " (" + suppressionReason + ")");
+            }
+
+            @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Log.e(TAG, "[PlaybackError] Error code: " + error.errorCode + ", message: " + error.getMessage(), error);
+                Log.e(TAG, "[PlaybackError] Error code: " + error.errorCode + ", name: " + error.getErrorCodeName() + ", message: " + error.getMessage(), error);
                 if (listener != null) {
                     listener.onError(error.getMessage());
                 }
@@ -296,13 +321,36 @@ public class SonaraAudioService extends MediaSessionService {
         }
     }
 
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+        Log.i(TAG, "[onStartCommand] flags=" + flags + " startId=" + startId + " action=" + (intent != null ? intent.getAction() : "null"));
+        return START_STICKY;
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.i(TAG, "[onTaskRemoved] App task removed from recents. player=" + (player != null ? player.isPlaying() : "null"));
+        if (player == null || !player.getPlayWhenReady() || player.getPlaybackState() == Player.STATE_ENDED) {
+            Log.i(TAG, "[onTaskRemoved] Stopping service since playback is idle/ended");
+            stopSelf();
+        } else {
+            Log.i(TAG, "[onTaskRemoved] Playback is actively running; preserving foreground playback service");
+        }
+    }
+
     @OptIn(markerClass = UnstableApi.class)
     @Override
     public void onUpdateNotification(@NonNull MediaSession session, boolean startInForegroundRequired) {
+        Log.i(TAG, "[onUpdateNotification] startInForegroundRequired=" + startInForegroundRequired
+            + " isPlaying=" + (player != null && player.isPlaying())
+            + " playWhenReady=" + (player != null && player.getPlayWhenReady())
+            + " playbackState=" + (player != null ? player.getPlaybackState() : -1));
         try {
             super.onUpdateNotification(session, startInForegroundRequired);
+            Log.i(TAG, "[onUpdateNotification] Notification updated successfully");
         } catch (Throwable t) {
-            Log.e(TAG, "[SonaraAudioService] Safely caught error in onUpdateNotification", t);
+            Log.e(TAG, "[onUpdateNotification] Failed to update notification", t);
         }
     }
 
@@ -547,14 +595,18 @@ public class SonaraAudioService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
-        Log.i(TAG, "[SonaraAudioService] onDestroy: releasing ExoPlayer and MediaSession");
+        Log.i(TAG, "[onDestroy] Service being destroyed. isPlaying=" + (player != null && player.isPlaying())
+            + " playWhenReady=" + (player != null && player.getPlayWhenReady())
+            + "\nCaller trace:\n" + Log.getStackTraceString(new Throwable()));
         instance = null;
         stopProgressTracking();
         if (mediaSession != null) {
+            Log.i(TAG, "[onDestroy] Releasing MediaSession");
             mediaSession.release();
             mediaSession = null;
         }
         if (player != null) {
+            Log.i(TAG, "[onDestroy] Releasing ExoPlayer");
             player.release();
             player = null;
         }
