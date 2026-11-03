@@ -88,8 +88,12 @@ public class SonaraAudioService extends MediaSessionService {
         super.onCreate();
         instance = this;
         Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
-        createNotificationChannels();
-        initExoPlayer();
+        try {
+            createNotificationChannels();
+            initExoPlayer();
+        } catch (Throwable t) {
+            Log.e(TAG, "[SonaraAudioService] Fatal error initializing ExoPlayer or MediaSession", t);
+        }
     }
 
     private void createNotificationChannels() {
@@ -202,6 +206,7 @@ public class SonaraAudioService extends MediaSessionService {
 
         // Connect MediaSession directly to ExoPlayer instance
         Intent sessionIntent = new Intent(this, MainActivity.class);
+        sessionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
             0,

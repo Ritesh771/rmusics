@@ -21,15 +21,7 @@ import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-@CapacitorPlugin(
-    name = "SonaraNativeAudio",
-    permissions = {
-        @Permission(
-            alias = "notifications",
-            strings = { Manifest.permission.POST_NOTIFICATIONS }
-        )
-    }
-)
+@CapacitorPlugin(name = "SonaraNativeAudio")
 public class SonaraNativeAudioPlugin extends Plugin {
     private static final String TAG = "SonaraPlugin";
     private SonaraAudioService audioService;
@@ -72,7 +64,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
-        bindAudioService();
+        // Lazy binding on first user playback request to guarantee zero startup overhead and no launch crashes
     }
 
     private void bindAudioService() {
@@ -292,22 +284,8 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void requestNotificationPermission(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (!hasPermission("notifications")) {
-                requestPermissionForAlias("notifications", call, "permissionCallback");
-                return;
-            }
-        }
         JSObject ret = new JSObject();
         ret.put("granted", true);
-        call.resolve(ret);
-    }
-
-    @com.getcapacitor.annotation.PermissionCallback
-    private void permissionCallback(PluginCall call) {
-        boolean granted = hasPermission("notifications");
-        JSObject ret = new JSObject();
-        ret.put("granted", granted);
         call.resolve(ret);
     }
 
