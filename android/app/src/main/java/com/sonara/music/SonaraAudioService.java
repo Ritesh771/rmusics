@@ -76,7 +76,16 @@ public class SonaraAudioService extends MediaSessionService {
     private boolean isShuffle = false;
     private ServiceListener listener;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean isProgressRunning = false;
+
+    private void runOnMain(Runnable r) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            r.run();
+        } else {
+            mainHandler.post(r);
+        }
+    }
 
     public class LocalBinder extends Binder {
         public SonaraAudioService getService() {
@@ -148,7 +157,21 @@ public class SonaraAudioService extends MediaSessionService {
             .setUsage(C.USAGE_MEDIA)
             .build();
 
+        androidx.media3.datasource.DefaultHttpDataSource.Factory httpDataSourceFactory =
+            new androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent("Sonara/1.0 (Linux; Android " + Build.VERSION.RELEASE + ")")
+                .setConnectTimeoutMs(20000)
+                .setReadTimeoutMs(20000)
+                .setAllowCrossProtocolRedirects(true);
+
+        androidx.media3.datasource.DefaultDataSource.Factory dataSourceFactory =
+            new androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory);
+
+        androidx.media3.exoplayer.source.DefaultMediaSourceFactory mediaSourceFactory =
+            new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory);
+
         player = new ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
@@ -301,132 +324,150 @@ public class SonaraAudioService extends MediaSessionService {
     }
 
     // Populate native playlist queue into ExoPlayer
-    public synchronized void setQueue(List<TrackItem> tracks, int startIndex, double startPosition) {
-        queue.clear();
-        queue.addAll(tracks);
+    public void setQueue(List<TrackItem> tracks, int startIndex, double startPosition) {
+        runOnMain(() -> {
+            queue.clear();
+            queue.addAll(tracks);
 
-        Log.i(TAG, "[setQueue] Setting playlist of " + tracks.size() + " items into single ExoPlayer instance. startIndex=" + startIndex + ", startPos=" + startPosition);
+            Log.i(TAG, "[setQueue] Setting playlist of " + tracks.size() + " items into single ExoPlayer instance. startIndex=" + startIndex + ", startPos=" + startPosition);
 
-        if (player == null || tracks.isEmpty()) {
-            Log.w(TAG, "[setQueue] Player is null or tracks list is empty");
-            return;
-        }
+            if (player == null || tracks.isEmpty()) {
+                Log.w(TAG, "[setQueue] Player is null or tracks list is empty");
+                return;
+            }
 
-        List<MediaItem> mediaItems = new ArrayList<>();
-        for (int i = 0; i < tracks.size(); i++) {
-            TrackItem t = tracks.get(i);
-            mediaItems.add(buildMediaItem(t));
-            Log.d(TAG, "  [" + i + "] id=\"" + t.id + "\" title=\"" + t.title + "\" artist=\"" + t.artist + "\" uri=" + t.audioUrl + " artUri=" + t.artworkUrl);
-        }
+            List<MediaItem> mediaItems = new ArrayList<>();
+            for (int i = 0; i < tracks.size(); i++) {
+                TrackItem t = tracks.get(i);
+                mediaItems.add(buildMediaItem(t));
+                Log.d(TAG, "  [" + i + "] id=\"" + t.id + "\" title=\"" + t.title + "\" artist=\"" + t.artist + "\" uri=" + t.audioUrl + " artUri=" + t.artworkUrl);
+            }
 
-        int index = Math.max(0, Math.min(startIndex, mediaItems.size() - 1));
-        long positionMs = (long) (Math.max(0, startPosition) * 1000);
+            int index = Math.max(0, Math.min(startIndex, mediaItems.size() - 1));
+            long positionMs = (long) (Math.max(0, startPosition) * 1000);
 
-        player.setMediaItems(mediaItems, index, positionMs);
-        applyRepeatMode();
-        applyShuffleMode();
-        player.prepare();
-        player.play();
+            player.setMediaItems(mediaItems, index, positionMs);
+            applyRepeatMode();
+            applyShuffleMode();
+            player.prepare();
+            player.play();
 
-        TrackItem current = queue.get(index);
-        Log.i(TAG, "[setQueue] Started playback of index " + index + ": \"" + current.title + "\"");
-        if (listener != null) {
-            listener.onTrackTransition(index, current);
-        }
+            TrackItem current = queue.get(index);
+            Log.i(TAG, "[setQueue] Started playback of index " + index + ": \"" + current.title + "\"");
+            if (listener != null) {
+                listener.onTrackTransition(index, current);
+            }
+        });
     }
 
-    public synchronized void playTrackAtIndex(int index, double startPosition) {
-        if (player == null || index < 0 || index >= queue.size()) {
-            Log.w(TAG, "[playTrackAtIndex] Invalid index: " + index + ", queue size: " + queue.size());
-            return;
-        }
-        long positionMs = (long) (Math.max(0, startPosition) * 1000);
-        Log.i(TAG, "[playTrackAtIndex] Seeking to index: " + index + " at " + positionMs + "ms: \"" + queue.get(index).title + "\"");
-        player.seekTo(index, positionMs);
-        player.play();
+    public void playTrackAtIndex(int index, double startPosition) {
+        runOnMain(() -> {
+            if (player == null || index < 0 || index >= queue.size()) {
+                Log.w(TAG, "[playTrackAtIndex] Invalid index: " + index + ", queue size: " + queue.size());
+                return;
+            }
+            long positionMs = (long) (Math.max(0, startPosition) * 1000);
+            Log.i(TAG, "[playTrackAtIndex] Seeking to index: " + index + " at " + positionMs + "ms: \"" + queue.get(index).title + "\"");
+            player.seekTo(index, positionMs);
+            player.play();
 
-        TrackItem current = queue.get(index);
-        if (listener != null) {
-            listener.onTrackTransition(index, current);
-        }
+            TrackItem current = queue.get(index);
+            if (listener != null) {
+                listener.onTrackTransition(index, current);
+            }
+        });
     }
 
-    public synchronized void next() {
-        if (player == null) return;
-        Log.i(TAG, "[next] hasNextMediaItem=" + player.hasNextMediaItem() + " currentIndex=" + player.getCurrentMediaItemIndex());
-        if (player.hasNextMediaItem()) {
-            player.seekToNextMediaItem();
-            player.play();
-        } else if ("all".equals(repeatMode) && !queue.isEmpty()) {
-            player.seekTo(0, 0);
-            player.play();
-        }
+    public void next() {
+        runOnMain(() -> {
+            if (player == null) return;
+            Log.i(TAG, "[next] hasNextMediaItem=" + player.hasNextMediaItem() + " currentIndex=" + player.getCurrentMediaItemIndex());
+            if (player.hasNextMediaItem()) {
+                player.seekToNextMediaItem();
+                player.play();
+            } else if ("all".equals(repeatMode) && !queue.isEmpty()) {
+                player.seekTo(0, 0);
+                player.play();
+            }
+        });
     }
 
-    public synchronized void previous() {
-        if (player == null) return;
-        Log.i(TAG, "[previous] currentPos=" + player.getCurrentPosition() + " hasPrevious=" + player.hasPreviousMediaItem());
-        if (player.getCurrentPosition() > 3000) {
-            player.seekTo(0);
-            return;
-        }
-        if (player.hasPreviousMediaItem()) {
-            player.seekToPreviousMediaItem();
-            player.play();
-        } else if ("all".equals(repeatMode) && !queue.isEmpty()) {
-            player.seekTo(queue.size() - 1, 0);
-            player.play();
-        } else {
-            player.seekTo(0);
-        }
+    public void previous() {
+        runOnMain(() -> {
+            if (player == null) return;
+            Log.i(TAG, "[previous] currentPos=" + player.getCurrentPosition() + " hasPrevious=" + player.hasPreviousMediaItem());
+            if (player.getCurrentPosition() > 3000) {
+                player.seekTo(0);
+                return;
+            }
+            if (player.hasPreviousMediaItem()) {
+                player.seekToPreviousMediaItem();
+                player.play();
+            } else if ("all".equals(repeatMode) && !queue.isEmpty()) {
+                player.seekTo(queue.size() - 1, 0);
+                player.play();
+            } else {
+                player.seekTo(0);
+            }
+        });
     }
 
     public void play() {
-        if (player != null) {
-            Log.i(TAG, "[play] isPlaying=" + player.isPlaying() + " playbackState=" + player.getPlaybackState() + " mediaItemCount=" + player.getMediaItemCount());
-            if (player.getMediaItemCount() == 0 && !queue.isEmpty()) {
-                Log.i(TAG, "[play] ExoPlayer was empty, restoring " + queue.size() + " items");
-                setQueue(new ArrayList<>(queue), 0, 0);
-                return;
+        runOnMain(() -> {
+            if (player != null) {
+                Log.i(TAG, "[play] isPlaying=" + player.isPlaying() + " playbackState=" + player.getPlaybackState() + " mediaItemCount=" + player.getMediaItemCount());
+                if (player.getMediaItemCount() == 0 && !queue.isEmpty()) {
+                    Log.i(TAG, "[play] ExoPlayer was empty, restoring " + queue.size() + " items");
+                    setQueue(new ArrayList<>(queue), 0, 0);
+                    return;
+                }
+                if (player.getPlaybackState() == Player.STATE_ENDED) {
+                    player.seekTo(0, 0);
+                }
+                if (player.getPlaybackState() == Player.STATE_IDLE && player.getMediaItemCount() > 0) {
+                    player.prepare();
+                }
+                player.play();
             }
-            if (player.getPlaybackState() == Player.STATE_ENDED) {
-                player.seekTo(0, 0);
-            }
-            if (player.getPlaybackState() == Player.STATE_IDLE && player.getMediaItemCount() > 0) {
-                player.prepare();
-            }
-            player.play();
-        }
+        });
     }
 
     public void pause() {
-        if (player != null) {
-            Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s");
-            player.pause();
-        }
+        runOnMain(() -> {
+            if (player != null) {
+                Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s");
+                player.pause();
+            }
+        });
     }
 
     public void togglePlay() {
-        if (player != null) {
-            if (player.isPlaying()) {
-                pause();
-            } else {
-                play();
+        runOnMain(() -> {
+            if (player != null) {
+                if (player.isPlaying()) {
+                    pause();
+                } else {
+                    play();
+                }
             }
-        }
+        });
     }
 
     public void seekTo(double seconds) {
-        if (player != null) {
-            Log.i(TAG, "[seekTo] Seeking to " + seconds + "s");
-            player.seekTo((long) (seconds * 1000));
-        }
+        runOnMain(() -> {
+            if (player != null) {
+                Log.i(TAG, "[seekTo] Seeking to " + seconds + "s");
+                player.seekTo((long) (seconds * 1000));
+            }
+        });
     }
 
     public void setRepeatMode(String mode) {
-        this.repeatMode = mode;
-        Log.i(TAG, "[setRepeatMode] " + mode);
-        applyRepeatMode();
+        runOnMain(() -> {
+            this.repeatMode = mode;
+            Log.i(TAG, "[setRepeatMode] " + mode);
+            applyRepeatMode();
+        });
     }
 
     private void applyRepeatMode() {
@@ -441,9 +482,11 @@ public class SonaraAudioService extends MediaSessionService {
     }
 
     public void setShuffle(boolean shuffle) {
-        this.isShuffle = shuffle;
-        Log.i(TAG, "[setShuffle] " + shuffle);
-        applyShuffleMode();
+        runOnMain(() -> {
+            this.isShuffle = shuffle;
+            Log.i(TAG, "[setShuffle] " + shuffle);
+            applyShuffleMode();
+        });
     }
 
     private void applyShuffleMode() {

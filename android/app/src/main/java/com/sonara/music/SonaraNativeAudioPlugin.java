@@ -27,37 +27,44 @@ public class SonaraNativeAudioPlugin extends Plugin {
     private SonaraAudioService audioService;
     private boolean isBound = false;
     private final List<Runnable> pendingOperations = new ArrayList<>();
+    private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
-            if (binder instanceof SonaraAudioService.LocalBinder) {
-                SonaraAudioService.LocalBinder localBinder = (SonaraAudioService.LocalBinder) binder;
-                audioService = localBinder.getService();
-            } else if (SonaraAudioService.getInstance() != null) {
-                audioService = SonaraAudioService.getInstance();
-            }
-            if (audioService != null) {
-                isBound = true;
-                setupServiceListener();
+            mainHandler.post(() -> {
+                if (binder instanceof SonaraAudioService.LocalBinder) {
+                    SonaraAudioService.LocalBinder localBinder = (SonaraAudioService.LocalBinder) binder;
+                    audioService = localBinder.getService();
+                } else if (SonaraAudioService.getInstance() != null) {
+                    audioService = SonaraAudioService.getInstance();
+                }
+                if (audioService != null) {
+                    isBound = true;
+                    setupServiceListener();
 
-                synchronized (pendingOperations) {
-                    for (Runnable op : pendingOperations) {
+                    List<Runnable> ops;
+                    synchronized (pendingOperations) {
+                        ops = new ArrayList<>(pendingOperations);
+                        pendingOperations.clear();
+                    }
+                    for (Runnable op : ops) {
                         try {
                             op.run();
                         } catch (Exception e) {
                             Log.e(TAG, "Error running pending op", e);
                         }
                     }
-                    pendingOperations.clear();
                 }
-            }
+            });
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            audioService = null;
-            isBound = false;
+            mainHandler.post(() -> {
+                audioService = null;
+                isBound = false;
+            });
         }
     };
 
@@ -140,22 +147,24 @@ public class SonaraNativeAudioPlugin extends Plugin {
     }
 
     private void runWithService(Runnable op) {
-        try {
-            if (audioService == null) {
-                audioService = SonaraAudioService.getInstance();
-            }
-            if (audioService != null) {
-                setupServiceListener();
-                op.run();
-            } else {
-                synchronized (pendingOperations) {
-                    pendingOperations.add(op);
+        mainHandler.post(() -> {
+            try {
+                if (audioService == null) {
+                    audioService = SonaraAudioService.getInstance();
                 }
-                bindAudioService();
+                if (audioService != null) {
+                    setupServiceListener();
+                    op.run();
+                } else {
+                    synchronized (pendingOperations) {
+                        pendingOperations.add(op);
+                    }
+                    bindAudioService();
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "Error running op with audio service", t);
             }
-        } catch (Throwable t) {
-            Log.e(TAG, "Error running op with audio service", t);
-        }
+        });
     }
 
     @PluginMethod
