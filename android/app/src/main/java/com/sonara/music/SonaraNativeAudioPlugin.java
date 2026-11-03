@@ -248,16 +248,20 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void pause(PluginCall call) {
-        Log.w(TAG, "[BRIDGE_CALL] pause() called from JS bridge. Trace:\n" + Log.getStackTraceString(new Throwable()));
+        String reason = call.getString("reason", "unspecified");
+        String caller = call.getString("caller", "unknown");
+        Log.w(TAG, "[BRIDGE_CALL] pause() called from JS bridge. reason=" + reason + " caller=" + caller);
         runWithService(() -> {
-            audioService.pause();
+            audioService.pause(reason, caller);
             call.resolve();
         });
     }
 
     @PluginMethod
     public void resume(PluginCall call) {
-        Log.i(TAG, "[BRIDGE_CALL] resume() called from JS bridge");
+        String reason = call.getString("reason", "unspecified");
+        String caller = call.getString("caller", "unknown");
+        Log.i(TAG, "[BRIDGE_CALL] resume() called from JS bridge. reason=" + reason + " caller=" + caller);
         runWithService(() -> {
             audioService.play();
             call.resolve();

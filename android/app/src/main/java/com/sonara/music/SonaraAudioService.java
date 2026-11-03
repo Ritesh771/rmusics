@@ -98,13 +98,7 @@ public class SonaraAudioService extends MediaSessionService {
     private boolean isAwaitingNetwork = false;
     private final Random random = new Random();
     private android.net.wifi.WifiManager.WifiLock wifiLock = null;
-    private boolean isNetworkConnected = true;
-    private ConnectivityManager.NetworkCallback networkCallback = null;
-    private int pendingRecoveryIndex = -1;
-    private long pendingRecoveryPositionMs = -1;
-    private boolean isAwaitingNetwork = false;
-    private final Random random = new Random();
-    private android.net.wifi.WifiManager.WifiLock wifiLock = null;
+    private long lastRecoverySuccessTimestamp = 0;
 
     private void cancelPendingRecovery() {
         if (pendingRecoveryRunnable != null) {
@@ -369,6 +363,7 @@ public class SonaraAudioService extends MediaSessionService {
                     case Player.STATE_READY:
                         networkRetryCount = 0;
                         if (player != null && player.getPlayWhenReady()) {
+                            lastRecoverySuccessTimestamp = System.currentTimeMillis();
                             startProgressTracking();
                         }
                         break;
@@ -719,11 +714,30 @@ public class SonaraAudioService extends MediaSessionService {
         });
     }
 
+    public boolean getPlayWhenReady() {
+        return player != null && player.getPlayWhenReady();
+    }
+
     public void pause() {
+        pause("unspecified", "internal");
+    }
+
+    public void pause(String reason, String caller) {
         runOnMain(() -> {
+            boolean isRecentRecovery = (System.currentTimeMillis() - lastRecoverySuccessTimestamp) < 8000;
+            boolean isSyntheticSync = "effect_sync".equals(reason) || "stale_sync".equals(reason) || "effect_no_song".equals(reason);
+            if (isRecentRecovery && isSyntheticSync && player != null && player.isPlaying()) {
+                Log.w(TAG, "[pause] REJECTING stale sync pause: native just recovered (" 
+                    + (System.currentTimeMillis() - lastRecoverySuccessTimestamp) 
+                    + "ms ago) and is actively playing! reason=" + reason + " caller=" + caller);
+                return;
+            }
+
             cancelPendingRecovery();
             if (player != null) {
-                Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s");
+                Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s. reason=" + reason + " caller=" + caller
+                    + " isPlaying=" + player.isPlaying() + " playWhenReady=" + player.getPlayWhenReady()
+                    + " currentIndex=" + player.getCurrentMediaItemIndex());
                 player.pause();
             }
         });
