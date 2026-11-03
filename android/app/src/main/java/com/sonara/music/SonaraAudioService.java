@@ -203,7 +203,6 @@ public class SonaraAudioService extends MediaSessionService {
         }
         try {
             initConnectivityMonitoring();
-            initConnectivityMonitoring();
             createNotificationChannels();
             initNotificationProvider();
             initExoPlayer();
@@ -369,12 +368,8 @@ public class SonaraAudioService extends MediaSessionService {
                         break;
                     case Player.STATE_ENDED:
                         Log.i(TAG, "[PlaybackState] Track natural end reached. currentIndex: " + getCurrentIndex() + ", repeatMode: " + repeatMode);
-                        if ("all".equals(repeatMode) && !queue.isEmpty() && player != null) {
-                            Log.i(TAG, "[PlaybackState] Repeating all: seeking to track 0");
-                            player.seekTo(0, 0);
-                            player.prepare();
-                            player.play();
-                        } else if (listener != null) {
+                        // REPEAT_MODE_ALL is set on the player, so ENDED only happens with repeat off.
+                        if (listener != null) {
                             listener.onPlaybackStateChanged(false);
                         }
                         break;
@@ -486,6 +481,12 @@ public class SonaraAudioService extends MediaSessionService {
         mediaSession = new MediaSession.Builder(this, player)
             .setSessionActivity(pendingIntent)
             .build();
+
+        // Our plugin binds via LocalBinder, so no MediaController ever connects and
+        // onGetSession() is never called. Without addSession(), Media3 never posts the
+        // media notification or promotes the service to foreground, and Android kills
+        // playback shortly after the app is backgrounded / screen locked.
+        addSession(mediaSession);
 
         Log.i(TAG, "[SonaraAudioService] MediaSession built successfully with token: " + mediaSession.getToken());
     }
@@ -854,20 +855,6 @@ public class SonaraAudioService extends MediaSessionService {
             + " playWhenReady=" + (player != null && player.getPlayWhenReady())
             + "\nCaller trace:\n" + Log.getStackTraceString(new Throwable()));
         cancelPendingRecovery();
-        if (networkCallback != null) {
-            try {
-                ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-                if (cm != null) cm.unregisterNetworkCallback(networkCallback);
-            } catch (Throwable ignored) {}
-            networkCallback = null;
-        }
-        if (wifiLock != null && wifiLock.isHeld()) {
-            try {
-                wifiLock.release();
-                Log.i(TAG, "[WifiLock] Released WifiLock");
-            } catch (Throwable ignored) {}
-            wifiLock = null;
-        }
         if (networkCallback != null) {
             try {
                 ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
