@@ -6,6 +6,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -30,8 +34,11 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class SonaraAudioService extends MediaSessionService {
     public static final String TAG = "SonaraAudio";
@@ -83,6 +90,84 @@ public class SonaraAudioService extends MediaSessionService {
     private boolean isProgressRunning = false;
     private int networkRetryCount = 0;
     private static final int MAX_NETWORK_RETRIES = 5;
+    private Runnable pendingRecoveryRunnable = null;
+    private boolean isNetworkConnected = true;
+    private ConnectivityManager.NetworkCallback networkCallback = null;
+    private int pendingRecoveryIndex = -1;
+    private long pendingRecoveryPositionMs = -1;
+    private boolean isAwaitingNetwork = false;
+    private final Random random = new Random();
+
+    private void cancelPendingRecovery() {
+        if (pendingRecoveryRunnable != null) {
+            mainHandler.removeCallbacks(pendingRecoveryRunnable);
+            pendingRecoveryRunnable = null;
+            Log.i(TAG, "[PlaybackRecovery] Cancelled pending recovery operation");
+        }
+        isAwaitingNetwork = false;
+    }
+
+    private void executeRecovery(int targetIndex, long targetPosition) {
+        cancelPendingRecovery();
+        if (player == null || targetIndex < 0 || targetIndex >= queue.size()) {
+            Log.w(TAG, "[PlaybackRecovery] Invalid recovery target: index=" + targetIndex + " queueSize=" + queue.size());
+            return;
+        }
+
+        boolean shouldPlay = player.getPlayWhenReady();
+        Log.i(TAG, "[PlaybackRecovery] retry execution: seekTo(" + targetIndex + ", " + targetPosition + "ms), prepare(), playWhenReady=" + shouldPlay);
+        player.seekTo(targetIndex, targetPosition);
+        player.prepare();
+        if (shouldPlay) {
+            player.play();
+        }
+    }
+
+    private void initConnectivityMonitoring() {
+        try {
+            // Configure JVM DNS cache TTL to 24 hours so resolved IPs stay in memory across track transitions
+            java.security.Security.setProperty("networkaddress.cache.ttl", "86400");
+            java.security.Security.setProperty("networkaddress.cache.negative.ttl", "0");
+
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                Network activeNet = cm.getActiveNetwork();
+                NetworkCapabilities caps = activeNet != null ? cm.getNetworkCapabilities(activeNet) : null;
+                isNetworkConnected = (caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));
+                Log.i(TAG, "[NetworkStatus] Initial network state: " + (isNetworkConnected ? "Available" : "Unavailable"));
+
+                NetworkRequest request = new NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build();
+
+                networkCallback = new ConnectivityManager.NetworkCallback() {
+                    @Override
+                    public void onAvailable(@NonNull Network network) {
+                        runOnMain(() -> {
+                            isNetworkConnected = true;
+                            Log.i(TAG, "[NetworkStatus] Available on " + network);
+                            if (isAwaitingNetwork && pendingRecoveryIndex >= 0) {
+                                Log.i(TAG, "[PlaybackRecovery] Network restored! Resuming recovery for index " + pendingRecoveryIndex);
+                                executeRecovery(pendingRecoveryIndex, pendingRecoveryPositionMs);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onLost(@NonNull Network network) {
+                        runOnMain(() -> {
+                            isNetworkConnected = false;
+                            Log.w(TAG, "[NetworkStatus] Lost network " + network);
+                        });
+                    }
+                };
+
+                cm.registerNetworkCallback(request, networkCallback);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "[SonaraAudioService] Error setting up connectivity monitoring", t);
+        }
+    }
 
     private void runOnMain(Runnable r) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -104,6 +189,7 @@ public class SonaraAudioService extends MediaSessionService {
         instance = this;
         Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
         try {
+            initConnectivityMonitoring();
             createNotificationChannels();
             initNotificationProvider();
             initExoPlayer();
@@ -314,22 +400,39 @@ public class SonaraAudioService extends MediaSessionService {
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
                 Log.e(TAG, "[PlaybackError] Fatal error code: " + error.errorCode + ", name: " + error.getErrorCodeName() + ", message: " + error.getMessage(), error);
+                boolean isPermanentHttpError = false;
                 Throwable cause = error.getCause();
                 while (cause != null) {
                     Log.e(TAG, "  -> Caused by: " + cause.getClass().getName() + ": " + cause.getMessage());
-                    if (cause instanceof androidx.media3.datasource.HttpDataSource.HttpDataSourceException) {
+                    if (cause instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                        androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException respEx =
+                            (androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) cause;
+                        Log.e(TAG, "     HTTP Status Code: " + respEx.responseCode);
+                        if (respEx.responseCode == 401 || respEx.responseCode == 403 || respEx.responseCode == 404 || respEx.responseCode == 410) {
+                            isPermanentHttpError = true;
+                            Log.e(TAG, "     Non-recoverable permanent HTTP status: " + respEx.responseCode + ". Auto-recovery will be skipped.");
+                        }
+                    } else if (cause instanceof androidx.media3.datasource.HttpDataSource.HttpDataSourceException) {
                         androidx.media3.datasource.HttpDataSource.HttpDataSourceException httpEx = (androidx.media3.datasource.HttpDataSource.HttpDataSourceException) cause;
-                        Log.e(TAG, "     HttpDataSource type=" + httpEx.type + " uri=" + (httpEx.dataSpec != null ? httpEx.dataSpec.uri : "null")
+                        String safeUri = "null";
+                        if (httpEx.dataSpec != null && httpEx.dataSpec.uri != null) {
+                            safeUri = httpEx.dataSpec.uri.toString().replaceAll("token=[^&]+", "token=REDACTED");
+                        }
+                        Log.e(TAG, "     HttpDataSource type=" + httpEx.type + " uri=" + safeUri
                             + " bytePosition=" + (httpEx.dataSpec != null ? httpEx.dataSpec.position : -1)
                             + " length=" + (httpEx.dataSpec != null ? httpEx.dataSpec.length : -1));
                     }
                     cause = cause.getCause();
                 }
 
-                boolean isNetworkError = (error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                                          error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
-                                          error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
-                                          error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS);
+                cancelPendingRecovery();
+
+                boolean isNetworkError = !isPermanentHttpError && (
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                );
 
                 if (isNetworkError && networkRetryCount < MAX_NETWORK_RETRIES) {
                     networkRetryCount++;
@@ -338,14 +441,16 @@ public class SonaraAudioService extends MediaSessionService {
                     long delayMs = Math.min(1000L * (1 << networkRetryCount), 6000L); // 2s, 4s, 6s exponential backoff
                     Log.w(TAG, "[PlaybackRecovery] Transient network error encountered. Scheduling auto-recovery attempt #"
                         + networkRetryCount + " in " + delayMs + "ms at track index " + targetIndex + " pos " + targetPosition + "ms");
-                    mainHandler.postDelayed(() -> {
+                    pendingRecoveryRunnable = () -> {
+                        pendingRecoveryRunnable = null;
                         if (player != null && targetIndex >= 0 && targetIndex < queue.size()) {
                             Log.i(TAG, "[PlaybackRecovery] Executing recovery: seekTo(" + targetIndex + ", " + targetPosition + "ms), prepare(), play()");
                             player.seekTo(targetIndex, targetPosition);
                             player.prepare();
                             player.play();
                         }
-                    }, delayMs);
+                    };
+                    mainHandler.postDelayed(pendingRecoveryRunnable, delayMs);
                 } else if (listener != null) {
                     listener.onError(error.getMessage());
                 }
@@ -455,6 +560,8 @@ public class SonaraAudioService extends MediaSessionService {
     // Populate native playlist queue into ExoPlayer
     public void setQueue(List<TrackItem> tracks, int startIndex, double startPosition) {
         runOnMain(() -> {
+            cancelPendingRecovery();
+            networkRetryCount = 0;
             queue.clear();
             queue.addAll(tracks);
 
@@ -486,11 +593,37 @@ public class SonaraAudioService extends MediaSessionService {
             if (listener != null) {
                 listener.onTrackTransition(index, current);
             }
+
+            // Pre-warm DNS cache for all hostnames in the playlist so background sleep does not fail with EAI_NODATA
+            new Thread(() -> {
+                try {
+                    java.util.Set<String> hosts = new java.util.HashSet<>();
+                    for (TrackItem t : tracks) {
+                        if (t.audioUrl != null && !t.audioUrl.isEmpty()) {
+                            try {
+                                Uri u = Uri.parse(t.audioUrl);
+                                String host = u.getHost();
+                                if (host != null && !host.isEmpty()) hosts.add(host);
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                    for (String h : hosts) {
+                        try {
+                            InetAddress[] addrs = InetAddress.getAllByName(h);
+                            Log.i(TAG, "[DNSPrewarm] Pre-warmed " + h + " -> " + java.util.Arrays.toString(addrs));
+                        } catch (Throwable t) {
+                            Log.w(TAG, "[DNSPrewarm] Unable to pre-warm " + h + ": " + t.getMessage());
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }).start();
         });
     }
 
     public void playTrackAtIndex(int index, double startPosition) {
         runOnMain(() -> {
+            cancelPendingRecovery();
+            networkRetryCount = 0;
             if (player == null || index < 0 || index >= queue.size()) {
                 Log.w(TAG, "[playTrackAtIndex] Invalid index: " + index + ", queue size: " + queue.size());
                 return;
@@ -509,6 +642,8 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void next() {
         runOnMain(() -> {
+            cancelPendingRecovery();
+            networkRetryCount = 0;
             if (player == null) return;
             Log.i(TAG, "[next] hasNextMediaItem=" + player.hasNextMediaItem() + " currentIndex=" + player.getCurrentMediaItemIndex());
             if (player.hasNextMediaItem()) {
@@ -523,6 +658,8 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void previous() {
         runOnMain(() -> {
+            cancelPendingRecovery();
+            networkRetryCount = 0;
             if (player == null) return;
             Log.i(TAG, "[previous] currentPos=" + player.getCurrentPosition() + " hasPrevious=" + player.hasPreviousMediaItem());
             if (player.getCurrentPosition() > 3000) {
@@ -563,6 +700,7 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void pause() {
         runOnMain(() -> {
+            cancelPendingRecovery();
             if (player != null) {
                 Log.i(TAG, "[pause] Pausing ExoPlayer at " + getCurrentPosition() + "s");
                 player.pause();
@@ -679,6 +817,14 @@ public class SonaraAudioService extends MediaSessionService {
         Log.i(TAG, "[onDestroy] Service being destroyed. isPlaying=" + (player != null && player.isPlaying())
             + " playWhenReady=" + (player != null && player.getPlayWhenReady())
             + "\nCaller trace:\n" + Log.getStackTraceString(new Throwable()));
+        cancelPendingRecovery();
+        if (networkCallback != null) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) cm.unregisterNetworkCallback(networkCallback);
+            } catch (Throwable ignored) {}
+            networkCallback = null;
+        }
         instance = null;
         stopProgressTracking();
         if (mediaSession != null) {
