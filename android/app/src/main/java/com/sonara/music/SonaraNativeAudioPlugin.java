@@ -39,16 +39,26 @@ public class SonaraNativeAudioPlugin extends Plugin {
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
-            SonaraAudioService.LocalBinder localBinder = (SonaraAudioService.LocalBinder) binder;
-            audioService = localBinder.getService();
-            isBound = true;
-            setupServiceListener();
+            if (binder instanceof SonaraAudioService.LocalBinder) {
+                SonaraAudioService.LocalBinder localBinder = (SonaraAudioService.LocalBinder) binder;
+                audioService = localBinder.getService();
+            } else if (SonaraAudioService.getInstance() != null) {
+                audioService = SonaraAudioService.getInstance();
+            }
+            if (audioService != null) {
+                isBound = true;
+                setupServiceListener();
 
-            synchronized (pendingOperations) {
-                for (Runnable op : pendingOperations) {
-                    op.run();
+                synchronized (pendingOperations) {
+                    for (Runnable op : pendingOperations) {
+                        try {
+                            op.run();
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error running pending op", e);
+                        }
+                    }
+                    pendingOperations.clear();
                 }
-                pendingOperations.clear();
             }
         }
 
@@ -68,21 +78,12 @@ public class SonaraNativeAudioPlugin extends Plugin {
     private void bindAudioService() {
         Context context = getContext();
         if (context == null) return;
-        Intent intent = new Intent(context, SonaraAudioService.class);
-        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-    }
-
-    private void ensureServiceStarted() {
-        Context context = getContext();
-        if (context == null) return;
-        Intent intent = new Intent(context, SonaraAudioService.class);
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-        } catch (Exception ignored) {}
+            Intent intent = new Intent(context, SonaraAudioService.class);
+            context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+        } catch (Exception e) {
+            Log.e(TAG, "Error binding audio service", e);
+        }
     }
 
     private void setupServiceListener() {
@@ -131,7 +132,11 @@ public class SonaraNativeAudioPlugin extends Plugin {
     }
 
     private void runWithService(Runnable op) {
-        if (isBound && audioService != null) {
+        if (audioService == null) {
+            audioService = SonaraAudioService.getInstance();
+        }
+        if (audioService != null) {
+            setupServiceListener();
             op.run();
         } else {
             synchronized (pendingOperations) {
@@ -173,7 +178,6 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
         runWithService(() -> {
             Log.i(TAG, "[setQueue] Received " + list.size() + " tracks from JS bridge");
-            ensureServiceStarted();
             audioService.setQueue(list, startIndex, startPosition);
             call.resolve();
         });

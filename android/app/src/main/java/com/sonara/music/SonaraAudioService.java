@@ -61,6 +61,12 @@ public class SonaraAudioService extends MediaSessionService {
         void onError(String message);
     }
 
+    private static volatile SonaraAudioService instance;
+
+    public static SonaraAudioService getInstance() {
+        return instance;
+    }
+
     private final IBinder binder = new LocalBinder();
     private ExoPlayer player;
     private MediaSession mediaSession;
@@ -80,6 +86,7 @@ public class SonaraAudioService extends MediaSessionService {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
         createNotificationChannels();
         initExoPlayer();
@@ -239,8 +246,7 @@ public class SonaraAudioService extends MediaSessionService {
         if (intent != null && intent.getAction() != null) {
             String action = intent.getAction();
             Log.d(TAG, "[onBind] Action: " + action);
-            if ("androidx.media3.session.MediaSessionService".equals(action) ||
-                "android.media.browse.MediaBrowserService".equals(action)) {
+            if ("androidx.media3.session.MediaSessionService".equals(action)) {
                 return super.onBind(intent);
             }
         }
@@ -278,9 +284,6 @@ public class SonaraAudioService extends MediaSessionService {
         applyShuffleMode();
         player.prepare();
         player.play();
-        try {
-            startService(new Intent(this, SonaraAudioService.class));
-        } catch (Exception ignored) {}
 
         TrackItem current = queue.get(index);
         Log.i(TAG, "[setQueue] Started playback of index " + index + ": \"" + current.title + "\"");
@@ -342,9 +345,6 @@ public class SonaraAudioService extends MediaSessionService {
                 player.seekTo(0, 0);
             }
             player.play();
-            try {
-                startService(new Intent(this, SonaraAudioService.class));
-            } catch (Exception ignored) {}
         }
     }
 
@@ -454,6 +454,7 @@ public class SonaraAudioService extends MediaSessionService {
     @Override
     public void onDestroy() {
         Log.i(TAG, "[SonaraAudioService] onDestroy: releasing ExoPlayer and MediaSession");
+        instance = null;
         stopProgressTracking();
         if (mediaSession != null) {
             mediaSession.release();
