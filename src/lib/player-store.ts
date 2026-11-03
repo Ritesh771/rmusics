@@ -2,6 +2,11 @@ import { create } from "zustand";
 import { supabase } from "@/integrations/supabase/client";
 
 let _lastPlayedId: string | null = null;
+let _nativeTogglePlayHandler: (() => void) | null = null;
+
+export function setNativeTogglePlayHandler(fn: (() => void) | null) {
+  _nativeTogglePlayHandler = fn;
+}
 async function recordPlay(song: Song | undefined) {
   if (!song || typeof window === "undefined") return;
   if (_lastPlayedId === song.id) return;
@@ -144,9 +149,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     void recordPlay(song);
   },
   togglePlay: () => {
-    const { currentIndex } = get();
+    const { currentIndex, isPlaying } = get();
     if (currentIndex < 0) return;
-    set((s) => ({ isPlaying: !s.isPlaying }));
+    if (_nativeTogglePlayHandler) {
+      _nativeTogglePlayHandler();
+    } else {
+      set({ isPlaying: !isPlaying });
+    }
   },
   next: () => {
     const { queue, currentIndex, repeat, shuffle } = get();

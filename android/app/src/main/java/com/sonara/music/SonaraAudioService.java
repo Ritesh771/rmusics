@@ -724,10 +724,11 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void pause(String reason, String caller) {
         runOnMain(() -> {
-            boolean isRecentRecovery = (System.currentTimeMillis() - lastRecoverySuccessTimestamp) < 8000;
-            boolean isSyntheticSync = "effect_sync".equals(reason) || "stale_sync".equals(reason) || "effect_no_song".equals(reason);
-            if (isRecentRecovery && isSyntheticSync && player != null && player.isPlaying()) {
-                Log.w(TAG, "[pause] REJECTING stale sync pause: native just recovered (" 
+            boolean isRecentRecovery = (System.currentTimeMillis() - lastRecoverySuccessTimestamp) < 15000;
+            boolean isRecoveryInProgress = pendingRecoveryRunnable != null || isAwaitingNetwork;
+            boolean isExplicitUserToggle = "user_toggle".equals(reason) || "user_action".equals(reason);
+            if ((isRecentRecovery || isRecoveryInProgress) && !isExplicitUserToggle && player != null && player.isPlaying()) {
+                Log.w(TAG, "[pause] REJECTING pause: native is recovering or just recovered (" 
                     + (System.currentTimeMillis() - lastRecoverySuccessTimestamp) 
                     + "ms ago) and is actively playing! reason=" + reason + " caller=" + caller);
                 return;
@@ -747,7 +748,7 @@ public class SonaraAudioService extends MediaSessionService {
         runOnMain(() -> {
             if (player != null) {
                 if (player.isPlaying()) {
-                    pause();
+                    pause("user_toggle", "togglePlay");
                 } else {
                     play();
                 }

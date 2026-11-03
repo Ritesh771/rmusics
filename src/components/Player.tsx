@@ -298,28 +298,16 @@ export function Player() {
       return;
     }
 
-    // Check if native already reported this exact isPlaying state
-    const isPlaybackStateEcho = lastNativeIsPlaying.current === isPlaying;
-
-    if (isPlaying) {
-      if (lastNativeSongId.current !== song.id) {
-        lastNativeSongId.current = song.id;
-        lastNativeIsPlaying.current = true;
-        const state = usePlayer.getState();
+    // Only sync track selection changes to native. Play/pause toggles are handled
+    // directly via togglePlayNative() without reactive pause echo loops.
+    if (lastNativeSongId.current !== song.id) {
+      lastNativeSongId.current = song.id;
+      const state = usePlayer.getState();
+      if (state.isPlaying) {
         playQueueNative(state.queue, state.currentIndex, state.progress || 0);
-      } else if (!isPlaybackStateEcho) {
-        lastNativeIsPlaying.current = true;
-        resumeNativeAudio("user_resume", "Player.tsx:resume");
-      }
-    } else {
-      if (!isPlaybackStateEcho) {
-        lastNativeIsPlaying.current = false;
-        pauseNativeAudio("user_pause", "Player.tsx:pause");
-      } else {
-        console.log("[Player.tsx] Suppressed echo pause: native already reported isPlaying=false");
       }
     }
-  }, [song?.id, isPlaying]);
+  }, [song?.id]);
 
   useEffect(() => {
     if (!isNativePlatform) return;

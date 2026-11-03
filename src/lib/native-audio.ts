@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
-import { usePlayer, type Song } from "./player-store";
+import { usePlayer, type Song, setNativeTogglePlayHandler } from "./player-store";
 
 export interface NativeTrack {
   id: string;
@@ -77,6 +77,11 @@ function mapSongToNative(song: Song): NativeTrack {
 export async function initNativeAudioBridge() {
   if (!isNativePlatform || isInitialized) return;
   isInitialized = true;
+
+  // Direct native togglePlay handler to eliminate reactive pause echo loops
+  setNativeTogglePlayHandler(() => {
+    togglePlayNative();
+  });
 
   try {
     // Request notification permission for lock-screen controls on Android 13+
