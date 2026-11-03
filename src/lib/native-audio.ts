@@ -79,8 +79,18 @@ export async function initNativeAudioBridge() {
   isInitialized = true;
 
   // Direct native togglePlay handler to eliminate reactive pause echo loops
-  setNativeTogglePlayHandler(() => {
-    togglePlayNative();
+  setNativeTogglePlayHandler(async () => {
+    try {
+      const nativeState = await SonaraNativeAudio.getState();
+      if (!nativeState || nativeState.currentIndex < 0) {
+        const state = usePlayer.getState();
+        if (state.queue.length > 0 && state.currentIndex >= 0) {
+          await playQueueNative(state.queue, state.currentIndex, state.progress || 0);
+          return;
+        }
+      }
+    } catch {}
+    await togglePlayNative();
   });
 
   try {
