@@ -348,7 +348,13 @@ export function Player() {
 
   // Seek
   useEffect(() => {
-    if (_seekTarget != null && audioRef.current) {
+    if (_seekTarget == null) return;
+    if (isNativePlatform) {
+      seekNativeAudio(_seekTarget);
+      clearSeek();
+      return;
+    }
+    if (audioRef.current) {
       const audio = audioRef.current;
       seekHoldRef.current = { target: _seekTarget, until: performance.now() + 300 };
       const readyForSeek =

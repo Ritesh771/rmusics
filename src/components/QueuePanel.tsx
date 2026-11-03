@@ -35,7 +35,7 @@ export function QueuePanel() {
   return (
     <div
       className="fixed z-[90] bg-card/95 text-card-foreground backdrop-blur-xl border border-border/80 shadow-2xl flex flex-col
-                 inset-x-2 bottom-36 top-20 rounded-xl animate-in slide-in-from-bottom-4 fade-in duration-200
+                 inset-x-2 bottom-36 top-[calc(4.5rem+env(safe-area-inset-top,0px))] rounded-xl animate-in slide-in-from-bottom-4 fade-in duration-200
                  md:inset-auto md:right-3 md:bottom-24 md:top-20 md:w-96 md:slide-in-from-right-4"
     >
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/60 shrink-0">

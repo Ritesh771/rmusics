@@ -178,12 +178,16 @@ public class SonaraAudioService extends MediaSessionService {
                         break;
                     case Player.STATE_READY:
                         Log.i(TAG, "[PlaybackState] STATE_READY (duration: " + getDuration() + "s, isPlaying: " + (player != null && player.isPlaying()) + ")");
+                        if (player != null && player.getPlayWhenReady()) {
+                            startProgressTracking();
+                        }
                         break;
                     case Player.STATE_ENDED:
                         Log.i(TAG, "[PlaybackState] STATE_ENDED (currentIndex: " + getCurrentIndex() + ", repeatMode: " + repeatMode + ")");
                         if ("all".equals(repeatMode) && !queue.isEmpty() && player != null) {
                             Log.i(TAG, "[PlaybackState] Repeating all: seeking to track 0");
                             player.seekTo(0, 0);
+                            player.prepare();
                             player.play();
                         } else if (listener != null) {
                             listener.onPlaybackStateChanged(false);
@@ -195,9 +199,6 @@ public class SonaraAudioService extends MediaSessionService {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
                 Log.i(TAG, "[PlaybackState] isPlaying: " + isPlaying + " (index: " + getCurrentIndex() + ")");
-                if (listener != null) {
-                    listener.onPlaybackStateChanged(isPlaying);
-                }
                 if (isPlaying) {
                     startProgressTracking();
                 } else {
@@ -206,16 +207,18 @@ public class SonaraAudioService extends MediaSessionService {
             }
 
             @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                Log.i(TAG, "[PlaybackState] onPlayWhenReadyChanged: " + playWhenReady + " reason=" + reason);
+                if (listener != null) {
+                    listener.onPlaybackStateChanged(playWhenReady);
+                }
+            }
+
+            @Override
             public void onPlayerError(@NonNull PlaybackException error) {
                 Log.e(TAG, "[PlaybackError] Error code: " + error.errorCode + ", message: " + error.getMessage(), error);
                 if (listener != null) {
                     listener.onError(error.getMessage());
-                }
-                if (player != null && player.hasNextMediaItem()) {
-                    Log.i(TAG, "[PlaybackError] Recovering by advancing to next media item in queue");
-                    player.seekToNextMediaItem();
-                    player.prepare();
-                    player.play();
                 }
             }
         });
@@ -247,11 +250,15 @@ public class SonaraAudioService extends MediaSessionService {
             metadataBuilder.setArtworkUri(Uri.parse(track.artworkUrl));
         }
 
-        return new MediaItem.Builder()
+        MediaItem.Builder itemBuilder = new MediaItem.Builder()
             .setMediaId(track.id)
-            .setUri(track.audioUrl)
-            .setMediaMetadata(metadataBuilder.build())
-            .build();
+            .setMediaMetadata(metadataBuilder.build());
+
+        if (track.audioUrl != null && !track.audioUrl.isEmpty()) {
+            itemBuilder.setUri(Uri.parse(track.audioUrl));
+        }
+
+        return itemBuilder.build();
     }
 
     @Nullable
@@ -376,9 +383,17 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void play() {
         if (player != null) {
-            Log.i(TAG, "[play] isPlaying=" + player.isPlaying() + " playbackState=" + player.getPlaybackState());
+            Log.i(TAG, "[play] isPlaying=" + player.isPlaying() + " playbackState=" + player.getPlaybackState() + " mediaItemCount=" + player.getMediaItemCount());
+            if (player.getMediaItemCount() == 0 && !queue.isEmpty()) {
+                Log.i(TAG, "[play] ExoPlayer was empty, restoring " + queue.size() + " items");
+                setQueue(new ArrayList<>(queue), 0, 0);
+                return;
+            }
             if (player.getPlaybackState() == Player.STATE_ENDED) {
                 player.seekTo(0, 0);
+            }
+            if (player.getPlaybackState() == Player.STATE_IDLE && player.getMediaItemCount() > 0) {
+                player.prepare();
             }
             player.play();
         }
