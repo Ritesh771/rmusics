@@ -318,10 +318,28 @@ public class SonaraNativeAudioPlugin extends Plugin {
     public void getState(PluginCall call) {
         runWithService(() -> {
             JSObject ret = new JSObject();
-            ret.put("isPlaying", audioService.isPlaying());
-            ret.put("position", audioService.getCurrentPosition());
-            ret.put("duration", audioService.getDuration());
-            ret.put("currentIndex", audioService.getCurrentIndex());
+            boolean isPlaying = audioService != null && audioService.isPlaying();
+            double pos = audioService != null ? audioService.getCurrentPosition() : 0;
+            double dur = audioService != null ? audioService.getDuration() : 0;
+            int idx = audioService != null ? audioService.getCurrentIndex() : -1;
+            ret.put("isPlaying", isPlaying);
+            ret.put("position", pos);
+            ret.put("duration", dur);
+            ret.put("currentIndex", idx);
+            if (audioService != null) {
+                SonaraAudioService.TrackItem track = audioService.getCurrentTrack();
+                if (track != null) {
+                    JSObject s = new JSObject();
+                    s.put("id", track.id);
+                    s.put("title", track.title);
+                    s.put("artist", track.artist);
+                    s.put("album", track.album);
+                    s.put("audio_url", track.audioUrl);
+                    s.put("thumbnail_url", track.artworkUrl);
+                    s.put("duration", track.duration);
+                    ret.put("song", s);
+                }
+            }
             call.resolve(ret);
         });
     }

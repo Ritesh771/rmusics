@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { usePlayer, type Song, setNativeTogglePlayHandler } from "./player-store";
 
 export interface NativeTrack {
@@ -22,7 +23,7 @@ export interface SonaraNativeAudioPlugin {
   seek(options: { time: number }): Promise<void>;
   setRepeat(options: { repeat: string }): Promise<void>;
   setShuffle(options: { shuffle: boolean }): Promise<void>;
-  getState(): Promise<{ isPlaying: boolean; position: number; duration: number; currentIndex: number }>;
+  getState(): Promise<{ isPlaying: boolean; position: number; duration: number; currentIndex: number; song?: NativeTrack }>;
   requestNotificationPermission(): Promise<{ granted: boolean }>;
 
   addListener(
@@ -72,6 +73,40 @@ function mapSongToNative(song: Song): NativeTrack {
     thumbnail_url: song.thumbnail_url || "",
     duration: song.duration || 0,
   };
+}
+
+export async function syncNativePlaybackState() {
+  if (!isNativePlatform) return;
+  try {
+    const nativeState = await SonaraNativeAudio.getState();
+    if (!nativeState) return;
+    console.log("[SonaraNativeAudio] Synced native playback state:", nativeState);
+    const state = usePlayer.getState();
+    const updates: Partial<{ isPlaying: boolean; currentIndex: number; progress: number; duration: number }> = {};
+
+    if (typeof nativeState.isPlaying === "boolean") {
+      updates.isPlaying = nativeState.isPlaying;
+      if (stateChangeListener) {
+        stateChangeListener(nativeState.isPlaying);
+      }
+    }
+    if (nativeState.currentIndex >= 0) {
+      updates.currentIndex = nativeState.currentIndex;
+      const targetSong = state.queue[nativeState.currentIndex] || nativeState.song;
+      if (trackChangeListener && targetSong) {
+        trackChangeListener(targetSong.id, nativeState.currentIndex);
+      }
+    }
+    if (Number.isFinite(nativeState.position) && nativeState.position >= 0) {
+      updates.progress = nativeState.position;
+    }
+    if (Number.isFinite(nativeState.duration) && nativeState.duration > 0) {
+      updates.duration = nativeState.duration;
+    }
+    usePlayer.setState(updates);
+  } catch (err) {
+    console.warn("[SonaraNativeAudio] Failed to sync native playback state:", err);
+  }
 }
 
 export async function initNativeAudioBridge() {
@@ -137,6 +172,24 @@ export async function initNativeAudioBridge() {
     await SonaraNativeAudio.addListener("error", ({ message }) => {
       console.warn("[SonaraNativeAudio] Error:", message);
     });
+
+    // Immediately sync native playback state on app launch/reopen
+    syncNativePlaybackState();
+
+    // Re-sync when app returns from background or recents
+    App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) {
+        syncNativePlaybackState();
+      }
+    }).catch(() => {});
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          syncNativePlaybackState();
+        }
+      });
+    }
   } catch (err) {
     console.warn("[SonaraNativeAudio] Initialization note:", err);
   }

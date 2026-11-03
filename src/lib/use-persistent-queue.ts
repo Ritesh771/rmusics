@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayer, type Song, type RepeatMode } from "./player-store";
+import { isNativePlatform, syncNativePlaybackState } from "./native-audio";
 
 const STORAGE_KEY = "r-musics-player-snapshot-v2";
 
@@ -99,6 +100,11 @@ export function usePersistentQueue(userId: string | null) {
         isPlaying: false,
         sleepTimer: snapshot.sleepTimer,
       });
+
+      // If native player is running in background service, restore the live isPlaying state immediately
+      if (isNativePlatform) {
+        syncNativePlaybackState();
+      }
     })();
   }, [userId]);
 
