@@ -129,7 +129,7 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
   return (
     <div
       className={cn(
-        "fixed inset-0 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] md:pb-20 z-[70] bg-background/95 md:bg-background/98 text-foreground flex flex-col overflow-y-auto backdrop-blur-2xl transition-all duration-300 select-none",
+        "fixed inset-0 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-20 z-[70] bg-background/95 md:bg-background/98 text-foreground flex flex-col overflow-y-auto backdrop-blur-2xl transition-all duration-300 select-none",
         closing
           ? "opacity-0 translate-y-4 scale-[0.99] pointer-events-none ease-in"
           : "opacity-100 translate-y-0 scale-100 ease-out animate-in fade-in zoom-in-95"
@@ -139,11 +139,12 @@ function NowPlayingContent({ song, closing }: { song: Song; closing: boolean }) 
 
       {/* TOP HEADER: Spotify Breadcrumb & Actions */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-4 shrink-0 border-b border-border/40 bg-background/30 backdrop-blur-md">
-        <div className="min-w-0 pr-4">
-          <div className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
+        <div className="min-w-0 pr-4 cursor-pointer group" onClick={closeNowPlaying} title="Collapse view">
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground group-hover:text-primary transition-colors font-bold flex items-center gap-1">
+            <ChevronDown className="h-3.5 w-3.5" />
             Playing from
           </div>
-          <div className="text-sm font-extrabold truncate text-foreground">
+          <div className="text-sm font-extrabold truncate text-foreground group-hover:text-primary transition-colors">
             {song.album || "Library Tracks"}
           </div>
         </div>
