@@ -24,6 +24,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import java.util.ArrayList;
@@ -90,9 +91,24 @@ public class SonaraAudioService extends MediaSessionService {
         Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
         try {
             createNotificationChannels();
+            initNotificationProvider();
             initExoPlayer();
         } catch (Throwable t) {
             Log.e(TAG, "[SonaraAudioService] Fatal error initializing ExoPlayer or MediaSession", t);
+        }
+    }
+
+    @OptIn(markerClass = UnstableApi.class)
+    private void initNotificationProvider() {
+        try {
+            DefaultMediaNotificationProvider provider = new DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .build();
+            provider.setSmallIcon(R.drawable.ic_notification);
+            setMediaNotificationProvider(provider);
+            Log.i(TAG, "[SonaraAudioService] Configured DefaultMediaNotificationProvider with ic_notification");
+        } catch (Throwable t) {
+            Log.e(TAG, "[SonaraAudioService] Error setting notification provider", t);
         }
     }
 
@@ -135,7 +151,7 @@ public class SonaraAudioService extends MediaSessionService {
         player = new ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build();
 
         player.addListener(new Player.Listener() {
@@ -241,8 +257,23 @@ public class SonaraAudioService extends MediaSessionService {
     @Nullable
     @Override
     public MediaSession onGetSession(@NonNull MediaSession.ControllerInfo controllerInfo) {
-        Log.d(TAG, "[onGetSession] Controller connected: " + controllerInfo.getPackageName());
-        return mediaSession;
+        try {
+            Log.d(TAG, "[onGetSession] Controller connected: " + controllerInfo.getPackageName());
+            return mediaSession;
+        } catch (Throwable t) {
+            Log.e(TAG, "[onGetSession] Error getting session", t);
+            return null;
+        }
+    }
+
+    @OptIn(markerClass = UnstableApi.class)
+    @Override
+    public void onUpdateNotification(@NonNull MediaSession session, boolean startInForegroundRequired) {
+        try {
+            super.onUpdateNotification(session, startInForegroundRequired);
+        } catch (Throwable t) {
+            Log.e(TAG, "[SonaraAudioService] Safely caught error in onUpdateNotification", t);
+        }
     }
 
     @Nullable

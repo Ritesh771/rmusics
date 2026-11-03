@@ -83,58 +83,78 @@ public class SonaraNativeAudioPlugin extends Plugin {
         audioService.setListener(new SonaraAudioService.ServiceListener() {
             @Override
             public void onTrackTransition(int index, SonaraAudioService.TrackItem track) {
-                JSObject ret = new JSObject();
-                ret.put("index", index);
-                if (track != null) {
-                    JSObject s = new JSObject();
-                    s.put("id", track.id);
-                    s.put("title", track.title);
-                    s.put("artist", track.artist);
-                    s.put("album", track.album);
-                    s.put("audio_url", track.audioUrl);
-                    s.put("thumbnail_url", track.artworkUrl);
-                    s.put("duration", track.duration);
-                    ret.put("song", s);
+                try {
+                    JSObject ret = new JSObject();
+                    ret.put("index", index);
+                    if (track != null) {
+                        JSObject s = new JSObject();
+                        s.put("id", track.id);
+                        s.put("title", track.title);
+                        s.put("artist", track.artist);
+                        s.put("album", track.album);
+                        s.put("audio_url", track.audioUrl);
+                        s.put("thumbnail_url", track.artworkUrl);
+                        s.put("duration", track.duration);
+                        ret.put("song", s);
+                    }
+                    notifyListeners("trackTransition", ret);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error in onTrackTransition listener", t);
                 }
-                notifyListeners("trackTransition", ret);
             }
 
             @Override
             public void onPlaybackStateChanged(boolean isPlaying) {
-                JSObject ret = new JSObject();
-                ret.put("isPlaying", isPlaying);
-                notifyListeners("playbackState", ret);
+                try {
+                    JSObject ret = new JSObject();
+                    ret.put("isPlaying", isPlaying);
+                    notifyListeners("playbackState", ret);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error in onPlaybackStateChanged listener", t);
+                }
             }
 
             @Override
             public void onProgressUpdated(double position, double duration) {
-                JSObject ret = new JSObject();
-                ret.put("position", position);
-                ret.put("duration", duration);
-                notifyListeners("progress", ret);
+                try {
+                    JSObject ret = new JSObject();
+                    ret.put("position", position);
+                    ret.put("duration", duration);
+                    notifyListeners("progress", ret);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error in onProgressUpdated listener", t);
+                }
             }
 
             @Override
             public void onError(String message) {
-                JSObject ret = new JSObject();
-                ret.put("message", message);
-                notifyListeners("error", ret);
+                try {
+                    JSObject ret = new JSObject();
+                    ret.put("message", message);
+                    notifyListeners("error", ret);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error in onError listener", t);
+                }
             }
         });
     }
 
     private void runWithService(Runnable op) {
-        if (audioService == null) {
-            audioService = SonaraAudioService.getInstance();
-        }
-        if (audioService != null) {
-            setupServiceListener();
-            op.run();
-        } else {
-            synchronized (pendingOperations) {
-                pendingOperations.add(op);
+        try {
+            if (audioService == null) {
+                audioService = SonaraAudioService.getInstance();
             }
-            bindAudioService();
+            if (audioService != null) {
+                setupServiceListener();
+                op.run();
+            } else {
+                synchronized (pendingOperations) {
+                    pendingOperations.add(op);
+                }
+                bindAudioService();
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Error running op with audio service", t);
         }
     }
 

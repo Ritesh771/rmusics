@@ -43,49 +43,57 @@ if (typeof window !== "undefined") {
 
   // Handle native deep link callback when returning from OAuth in browser
   if (Capacitor.isNativePlatform()) {
-    App.addListener("appUrlOpen", async ({ url }) => {
-      try {
-        await Browser.close().catch(() => {});
-      } catch {}
-
+    const handleAuthUrl = async (url: string) => {
       if (!url) return;
+      try {
+        // Format 1: com.sonara.music://auth/callback#access_token=...&refresh_token=...
+        // Format 2: com.sonara.music://auth/callback?code=...
+        if (url.includes("com.sonara.music://") || url.includes("access_token") || url.includes("code=")) {
+          const hashIndex = url.indexOf("#");
+          const queryIndex = url.indexOf("?");
 
-      // Check if URL contains auth tokens / code
-      // Format 1: com.sonara.music://auth/callback#access_token=...&refresh_token=...
-      // Format 2: com.sonara.music://auth/callback?code=...
-      if (url.includes("com.sonara.music://") || url.includes("access_token") || url.includes("code=")) {
-        const hashIndex = url.indexOf("#");
-        const queryIndex = url.indexOf("?");
+          if (hashIndex !== -1) {
+            const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
+            const accessToken = hashParams.get("access_token");
+            const refreshToken = hashParams.get("refresh_token");
 
-        if (hashIndex !== -1) {
-          const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
-          const accessToken = hashParams.get("access_token");
-          const refreshToken = hashParams.get("refresh_token");
-
-          if (accessToken && refreshToken) {
-            const { data } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (data?.session) {
-              useAuthStore.getState().setSession(data.session);
-            }
-            return;
-          }
-        }
-
-        if (queryIndex !== -1) {
-          const queryParams = new URLSearchParams(url.substring(queryIndex + 1));
-          const code = queryParams.get("code");
-          if (code) {
-            const { data } = await supabase.auth.exchangeCodeForSession(code);
-            if (data?.session) {
-              useAuthStore.getState().setSession(data.session);
+            if (accessToken && refreshToken) {
+              const { data } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (data?.session) {
+                useAuthStore.getState().setSession(data.session);
+              }
+              return;
             }
           }
+
+          if (queryIndex !== -1) {
+            const queryParams = new URLSearchParams(url.substring(queryIndex + 1));
+            const code = queryParams.get("code");
+            if (code) {
+              const { data } = await supabase.auth.exchangeCodeForSession(code);
+              if (data?.session) {
+                useAuthStore.getState().setSession(data.session);
+              }
+            }
+          }
         }
+      } catch (err) {
+        console.warn("[Auth] Failed to process OAuth callback URL:", err);
       }
+    };
+
+    App.addListener("appUrlOpen", ({ url }) => {
+      handleAuthUrl(url);
     });
+
+    App.getLaunchUrl().then((res) => {
+      if (res?.url) {
+        handleAuthUrl(res.url);
+      }
+    }).catch(() => {});
   }
 }
 

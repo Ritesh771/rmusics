@@ -284,8 +284,10 @@ export function Player() {
   useEffect(() => {
     if (!isNativePlatform) return;
     if (!song) {
-      pauseNativeAudio();
-      lastNativeSongId.current = null;
+      if (lastNativeSongId.current !== null) {
+        pauseNativeAudio();
+        lastNativeSongId.current = null;
+      }
       return;
     }
 
