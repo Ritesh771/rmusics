@@ -199,12 +199,40 @@ public class SonaraAudioService extends MediaSessionService {
             }
 
             @Override
+            public void onIsLoadingChanged(boolean isLoading) {
+                long bufferedPos = player != null ? player.getBufferedPosition() : -1;
+                long totalDur = player != null ? player.getDuration() : -1;
+                int bufferedPercentage = player != null ? player.getBufferedPercentage() : -1;
+                Log.i(TAG, "[onIsLoadingChanged] isLoading=" + isLoading
+                    + " bufferedPos=" + (bufferedPos / 1000.0) + "s / " + (totalDur / 1000.0) + "s (" + bufferedPercentage + "%)"
+                    + " currentIndex=" + getCurrentIndex());
+            }
+
+            @Override
+            public void onAudioAttributesChanged(AudioAttributes audioAttributes) {
+                Log.i(TAG, "[onAudioAttributesChanged] contentType=" + audioAttributes.contentType
+                    + " usage=" + audioAttributes.usage
+                    + " flags=" + audioAttributes.flags);
+            }
+
+            @Override
+            public void onTracksChanged(androidx.media3.common.Tracks tracks) {
+                Log.i(TAG, "[onTracksChanged] Track groups count: " + tracks.getGroups().size()
+                    + " hasTracks=" + (!tracks.getGroups().isEmpty()));
+            }
+
+            @Override
             public void onPlaybackStateChanged(int state) {
                 String stateStr = (state == Player.STATE_IDLE) ? "STATE_IDLE" :
                                   (state == Player.STATE_BUFFERING) ? "STATE_BUFFERING" :
                                   (state == Player.STATE_READY) ? "STATE_READY" : "STATE_ENDED";
-                Log.i(TAG, "[PlaybackState] " + stateStr + " (pos: " + getCurrentPosition() + "s, dur: " + getDuration() + "s, isPlaying: "
-                    + (player != null && player.isPlaying()) + ", playWhenReady: " + (player != null && player.getPlayWhenReady())
+                long bufferedPos = player != null ? player.getBufferedPosition() : -1;
+                int bufferedPercentage = player != null ? player.getBufferedPercentage() : -1;
+                Log.i(TAG, "[PlaybackState] " + stateStr + " (pos: " + getCurrentPosition() + "s, dur: " + getDuration() + "s"
+                    + ", buffered: " + (bufferedPos / 1000.0) + "s [" + bufferedPercentage + "%]"
+                    + ", isPlaying: " + (player != null && player.isPlaying())
+                    + ", isLoading: " + (player != null && player.isLoading())
+                    + ", playWhenReady: " + (player != null && player.getPlayWhenReady())
                     + ", suppression: " + (player != null ? player.getPlaybackSuppressionReason() : -1) + ")");
                 switch (state) {
                     case Player.STATE_IDLE:

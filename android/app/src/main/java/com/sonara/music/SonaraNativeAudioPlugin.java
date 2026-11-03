@@ -239,6 +239,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void togglePlay(PluginCall call) {
+        Log.i(TAG, "[BRIDGE_CALL] togglePlay() called from JS bridge");
         runWithService(() -> {
             audioService.togglePlay();
             call.resolve();
@@ -247,6 +248,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void pause(PluginCall call) {
+        Log.w(TAG, "[BRIDGE_CALL] pause() called from JS bridge. Trace:\n" + Log.getStackTraceString(new Throwable()));
         runWithService(() -> {
             audioService.pause();
             call.resolve();
@@ -255,6 +257,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void resume(PluginCall call) {
+        Log.i(TAG, "[BRIDGE_CALL] resume() called from JS bridge");
         runWithService(() -> {
             audioService.play();
             call.resolve();
@@ -263,6 +266,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void next(PluginCall call) {
+        Log.i(TAG, "[BRIDGE_CALL] next() called from JS bridge");
         runWithService(() -> {
             audioService.next();
             call.resolve();
@@ -271,6 +275,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void prev(PluginCall call) {
+        Log.i(TAG, "[BRIDGE_CALL] prev() called from JS bridge");
         runWithService(() -> {
             audioService.previous();
             call.resolve();
@@ -280,6 +285,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
     @PluginMethod
     public void seek(PluginCall call) {
         double time = call.getDouble("time", 0.0);
+        Log.i(TAG, "[BRIDGE_CALL] seek(" + time + "s) called from JS bridge");
         runWithService(() -> {
             audioService.seekTo(time);
             call.resolve();
