@@ -97,6 +97,14 @@ public class SonaraAudioService extends MediaSessionService {
     private long pendingRecoveryPositionMs = -1;
     private boolean isAwaitingNetwork = false;
     private final Random random = new Random();
+    private android.net.wifi.WifiManager.WifiLock wifiLock = null;
+    private boolean isNetworkConnected = true;
+    private ConnectivityManager.NetworkCallback networkCallback = null;
+    private int pendingRecoveryIndex = -1;
+    private long pendingRecoveryPositionMs = -1;
+    private boolean isAwaitingNetwork = false;
+    private final Random random = new Random();
+    private android.net.wifi.WifiManager.WifiLock wifiLock = null;
 
     private void cancelPendingRecovery() {
         if (pendingRecoveryRunnable != null) {
@@ -189,6 +197,18 @@ public class SonaraAudioService extends MediaSessionService {
         instance = this;
         Log.i(TAG, "[SonaraAudioService] onCreate: Initializing service and ExoPlayer MediaSession");
         try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                wifiLock = wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Sonara:WifiLock");
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();
+                Log.i(TAG, "[WifiLock] Acquired WIFI_MODE_FULL_HIGH_PERF");
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "[WifiLock] Could not acquire WifiLock", t);
+        }
+        try {
+            initConnectivityMonitoring();
             initConnectivityMonitoring();
             createNotificationChannels();
             initNotificationProvider();
@@ -266,11 +286,12 @@ public class SonaraAudioService extends MediaSessionService {
 
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                30000,   // minBufferMs (30s)
-                180000,  // maxBufferMs (180s - 3 minutes ahead)
+                60000,   // minBufferMs (60s)
+                600000,  // maxBufferMs (600s = 10 minutes: buffers complete audio file)
                 2000,    // bufferForPlaybackMs
                 5000     // bufferForPlaybackAfterRebufferMs
             )
+            .setTargetBufferBytes(64 * 1024 * 1024) // 64MB allows whole track to buffer upfront in memory
             .setBackBuffer(30000, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build();
@@ -824,6 +845,27 @@ public class SonaraAudioService extends MediaSessionService {
                 if (cm != null) cm.unregisterNetworkCallback(networkCallback);
             } catch (Throwable ignored) {}
             networkCallback = null;
+        }
+        if (wifiLock != null && wifiLock.isHeld()) {
+            try {
+                wifiLock.release();
+                Log.i(TAG, "[WifiLock] Released WifiLock");
+            } catch (Throwable ignored) {}
+            wifiLock = null;
+        }
+        if (networkCallback != null) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) cm.unregisterNetworkCallback(networkCallback);
+            } catch (Throwable ignored) {}
+            networkCallback = null;
+        }
+        if (wifiLock != null && wifiLock.isHeld()) {
+            try {
+                wifiLock.release();
+                Log.i(TAG, "[WifiLock] Released WifiLock");
+            } catch (Throwable ignored) {}
+            wifiLock = null;
         }
         instance = null;
         stopProgressTracking();

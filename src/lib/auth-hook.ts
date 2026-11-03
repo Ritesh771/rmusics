@@ -64,6 +64,10 @@ if (typeof window !== "undefined") {
               });
               if (data?.session) {
                 useAuthStore.getState().setSession(data.session);
+                try { await Browser.close(); } catch (ignored) {}
+                if (typeof window !== "undefined") {
+                  window.location.href = "/";
+                }
               }
               return;
             }
@@ -76,6 +80,10 @@ if (typeof window !== "undefined") {
               const { data } = await supabase.auth.exchangeCodeForSession(code);
               if (data?.session) {
                 useAuthStore.getState().setSession(data.session);
+                try { await Browser.close(); } catch (ignored) {}
+                if (typeof window !== "undefined") {
+                  window.location.href = "/";
+                }
               }
             }
           }
@@ -85,8 +93,11 @@ if (typeof window !== "undefined") {
       }
     };
 
-    App.addListener("appUrlOpen", ({ url }) => {
-      handleAuthUrl(url);
+    App.addListener("appUrlOpen", async ({ url }) => {
+      try {
+        await Browser.close();
+      } catch (ignored) {}
+      await handleAuthUrl(url);
     });
 
     App.getLaunchUrl().then((res) => {

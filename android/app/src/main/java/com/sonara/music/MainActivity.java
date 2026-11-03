@@ -1,9 +1,16 @@
 package com.sonara.music;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -17,7 +24,32 @@ public class MainActivity extends BridgeActivity {
             Log.e(TAG, "Failed to register SonaraNativeAudioPlugin", t);
         }
         super.onCreate(savedInstanceState);
+        setupEdgeToEdgeAndStatusBar();
         enableBackgroundPlayback();
+    }
+
+    private void setupEdgeToEdgeAndStatusBar() {
+        try {
+            // Apply top padding equal to status bar height so web content NEVER collides with the system status bar
+            View contentView = findViewById(android.R.id.content);
+            if (contentView != null) {
+                ViewCompat.setOnApplyWindowInsetsListener(contentView, (v, windowInsets) -> {
+                    Insets statusInsets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
+                    v.setPadding(0, statusInsets.top, 0, 0);
+                    return windowInsets;
+                });
+            }
+
+            // Match Sonara dark theme background for status bar
+            getWindow().setStatusBarColor(Color.parseColor("#0d0b14"));
+            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            if (controller != null) {
+                // White text and icons on the dark status bar
+                controller.setAppearanceLightStatusBars(false);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Error configuring status bar insets", t);
+        }
     }
 
     @Override
