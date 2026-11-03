@@ -23,7 +23,10 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
@@ -78,6 +81,8 @@ public class SonaraAudioService extends MediaSessionService {
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean isProgressRunning = false;
+    private int networkRetryCount = 0;
+    private static final int MAX_NETWORK_RETRIES = 5;
 
     private void runOnMain(Runnable r) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -160,18 +165,33 @@ public class SonaraAudioService extends MediaSessionService {
         androidx.media3.datasource.DefaultHttpDataSource.Factory httpDataSourceFactory =
             new androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setUserAgent("Sonara/1.0 (Linux; Android " + Build.VERSION.RELEASE + ")")
-                .setConnectTimeoutMs(20000)
-                .setReadTimeoutMs(20000)
+                .setConnectTimeoutMs(30000)
+                .setReadTimeoutMs(30000)
                 .setAllowCrossProtocolRedirects(true);
 
         androidx.media3.datasource.DefaultDataSource.Factory dataSourceFactory =
             new androidx.media3.datasource.DefaultDataSource.Factory(this, httpDataSourceFactory);
 
-        androidx.media3.exoplayer.source.DefaultMediaSourceFactory mediaSourceFactory =
-            new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory);
+        DefaultLoadErrorHandlingPolicy loadErrorHandlingPolicy = new DefaultLoadErrorHandlingPolicy(8);
+
+        DefaultMediaSourceFactory mediaSourceFactory =
+            new DefaultMediaSourceFactory(dataSourceFactory)
+                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
+
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                30000,   // minBufferMs (30s)
+                180000,  // maxBufferMs (180s - 3 minutes ahead)
+                2000,    // bufferForPlaybackMs
+                5000     // bufferForPlaybackAfterRebufferMs
+            )
+            .setBackBuffer(30000, true)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build();
 
         player = new ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -240,6 +260,7 @@ public class SonaraAudioService extends MediaSessionService {
                     case Player.STATE_BUFFERING:
                         break;
                     case Player.STATE_READY:
+                        networkRetryCount = 0;
                         if (player != null && player.getPlayWhenReady()) {
                             startProgressTracking();
                         }
@@ -292,8 +313,40 @@ public class SonaraAudioService extends MediaSessionService {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Log.e(TAG, "[PlaybackError] Error code: " + error.errorCode + ", name: " + error.getErrorCodeName() + ", message: " + error.getMessage(), error);
-                if (listener != null) {
+                Log.e(TAG, "[PlaybackError] Fatal error code: " + error.errorCode + ", name: " + error.getErrorCodeName() + ", message: " + error.getMessage(), error);
+                Throwable cause = error.getCause();
+                while (cause != null) {
+                    Log.e(TAG, "  -> Caused by: " + cause.getClass().getName() + ": " + cause.getMessage());
+                    if (cause instanceof androidx.media3.datasource.HttpDataSource.HttpDataSourceException) {
+                        androidx.media3.datasource.HttpDataSource.HttpDataSourceException httpEx = (androidx.media3.datasource.HttpDataSource.HttpDataSourceException) cause;
+                        Log.e(TAG, "     HttpDataSource type=" + httpEx.type + " uri=" + (httpEx.dataSpec != null ? httpEx.dataSpec.uri : "null")
+                            + " bytePosition=" + (httpEx.dataSpec != null ? httpEx.dataSpec.position : -1)
+                            + " length=" + (httpEx.dataSpec != null ? httpEx.dataSpec.length : -1));
+                    }
+                    cause = cause.getCause();
+                }
+
+                boolean isNetworkError = (error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                                          error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                                          error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
+                                          error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS);
+
+                if (isNetworkError && networkRetryCount < MAX_NETWORK_RETRIES) {
+                    networkRetryCount++;
+                    int targetIndex = player != null ? player.getCurrentMediaItemIndex() : -1;
+                    long targetPosition = player != null ? player.getCurrentPosition() : 0;
+                    long delayMs = Math.min(1000L * (1 << networkRetryCount), 6000L); // 2s, 4s, 6s exponential backoff
+                    Log.w(TAG, "[PlaybackRecovery] Transient network error encountered. Scheduling auto-recovery attempt #"
+                        + networkRetryCount + " in " + delayMs + "ms at track index " + targetIndex + " pos " + targetPosition + "ms");
+                    mainHandler.postDelayed(() -> {
+                        if (player != null && targetIndex >= 0 && targetIndex < queue.size()) {
+                            Log.i(TAG, "[PlaybackRecovery] Executing recovery: seekTo(" + targetIndex + ", " + targetPosition + "ms), prepare(), play()");
+                            player.seekTo(targetIndex, targetPosition);
+                            player.prepare();
+                            player.play();
+                        }
+                    }, delayMs);
+                } else if (listener != null) {
                     listener.onError(error.getMessage());
                 }
             }
