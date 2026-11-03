@@ -15,8 +15,8 @@ export interface SonaraNativeAudioPlugin {
   setQueue(options: { tracks: NativeTrack[]; startIndex: number; startPosition?: number }): Promise<void>;
   playSong(options: { song: NativeTrack; startTime?: number }): Promise<void>;
   togglePlay(): Promise<void>;
-  pause(): Promise<void>;
-  resume(): Promise<void>;
+  pause(options?: { reason?: string; caller?: string }): Promise<void>;
+  resume(options?: { reason?: string; caller?: string }): Promise<void>;
   next(): Promise<void>;
   prev(): Promise<void>;
   seek(options: { time: number }): Promise<void>;
@@ -52,9 +52,14 @@ export const isNativePlatform = Capacitor.isNativePlatform();
 
 let isInitialized = false;
 let trackChangeListener: ((songId: string, index: number) => void) | null = null;
+let stateChangeListener: ((isPlaying: boolean) => void) | null = null;
 
 export function setNativeTrackChangeListener(fn: (songId: string, index: number) => void) {
   trackChangeListener = fn;
+}
+
+export function setNativeStateChangeListener(fn: (isPlaying: boolean) => void) {
+  stateChangeListener = fn;
 }
 
 function mapSongToNative(song: Song): NativeTrack {
@@ -96,6 +101,10 @@ export async function initNativeAudioBridge() {
 
     // Listen for playback state changes (play, pause from lock screen or notification)
     await SonaraNativeAudio.addListener("playbackState", ({ isPlaying }) => {
+      console.log(`[SonaraNativeAudio] Native playbackState received: isPlaying=${isPlaying}`);
+      if (stateChangeListener) {
+        stateChangeListener(isPlaying);
+      }
       usePlayer.setState({ isPlaying });
     });
 
@@ -151,14 +160,16 @@ export async function togglePlayNative() {
   await SonaraNativeAudio.togglePlay();
 }
 
-export async function pauseNativeAudio() {
+export async function pauseNativeAudio(reason = "user_action", caller = "unknown") {
   if (!isNativePlatform) return;
-  await SonaraNativeAudio.pause();
+  console.log(`[SonaraNativeAudio] pause requested. reason=${reason}, caller=${caller}`);
+  await SonaraNativeAudio.pause({ reason, caller });
 }
 
-export async function resumeNativeAudio() {
+export async function resumeNativeAudio(reason = "user_action", caller = "unknown") {
   if (!isNativePlatform) return;
-  await SonaraNativeAudio.resume();
+  console.log(`[SonaraNativeAudio] resume requested. reason=${reason}, caller=${caller}`);
+  await SonaraNativeAudio.resume({ reason, caller });
 }
 
 export async function nextNativeAudio() {

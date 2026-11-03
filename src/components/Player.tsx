@@ -15,6 +15,7 @@ import {
   setRepeatNativeAudio,
   setShuffleNativeAudio,
   setNativeTrackChangeListener,
+  setNativeStateChangeListener,
 } from "@/lib/native-audio";
 import {
   Play,
@@ -270,6 +271,7 @@ export function Player() {
 
   // Native ExoPlayer lifecycle & synchronization
   const lastNativeSongId = useRef<string | null>(null);
+  const lastNativeIsPlaying = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (!isNativePlatform) return;
@@ -279,28 +281,43 @@ export function Player() {
       // does not echo back and re-set the queue when a track ends naturally.
       lastNativeSongId.current = songId;
     });
+    setNativeStateChangeListener((nativeIsPlaying) => {
+      // Keep track of native playback state so the effect below
+      // does not echo back pause/resume commands when native changes state.
+      lastNativeIsPlaying.current = nativeIsPlaying;
+    });
   }, []);
 
   useEffect(() => {
     if (!isNativePlatform) return;
     if (!song) {
       if (lastNativeSongId.current !== null) {
-        pauseNativeAudio();
+        pauseNativeAudio("effect_no_song", "Player.tsx:no_song");
         lastNativeSongId.current = null;
       }
       return;
     }
 
+    // Check if native already reported this exact isPlaying state
+    const isPlaybackStateEcho = lastNativeIsPlaying.current === isPlaying;
+
     if (isPlaying) {
       if (lastNativeSongId.current !== song.id) {
         lastNativeSongId.current = song.id;
+        lastNativeIsPlaying.current = true;
         const state = usePlayer.getState();
         playQueueNative(state.queue, state.currentIndex, state.progress || 0);
-      } else {
-        resumeNativeAudio();
+      } else if (!isPlaybackStateEcho) {
+        lastNativeIsPlaying.current = true;
+        resumeNativeAudio("user_resume", "Player.tsx:resume");
       }
     } else {
-      pauseNativeAudio();
+      if (!isPlaybackStateEcho) {
+        lastNativeIsPlaying.current = false;
+        pauseNativeAudio("user_pause", "Player.tsx:pause");
+      } else {
+        console.log("[Player.tsx] Suppressed echo pause: native already reported isPlaying=false");
+      }
     }
   }, [song?.id, isPlaying]);
 
