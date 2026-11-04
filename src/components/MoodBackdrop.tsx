@@ -68,14 +68,16 @@ export function MoodBackdrop({ intensity = 1 }: { intensity?: number }) {
 
   if (!enabled) return null;
 
-  const baseOpacity = (isPlaying ? 0.6 : 0.32) * intensity;
+  // Gradient alpha stays fixed: gradients can't transition, so changing it on play/pause
+  // snapped the backdrop. Dim via container opacity and pause (not restart) the drift.
+  const baseOpacity = 0.6 * intensity;
   const c = (i: number) => palette[i % palette.length] ?? palette[0] ?? "139,92,246";
 
   return (
     <div
       aria-hidden
-      className={`pointer-events-none fixed inset-0 -z-0 overflow-hidden ${isPlaying ? "aurora-active" : ""}`}
-      style={{ transition: "opacity 600ms ease" }}
+      className={`pointer-events-none fixed inset-0 -z-0 overflow-hidden ${isPlaying ? "" : "aurora-paused"}`}
+      style={{ opacity: isPlaying ? 1 : 0.55, transition: "opacity 600ms ease" }}
     >
       <div
         className="aurora-blob aurora-1"
