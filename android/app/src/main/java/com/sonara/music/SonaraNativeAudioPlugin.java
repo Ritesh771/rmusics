@@ -71,7 +71,7 @@ public class SonaraNativeAudioPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
-        // Lazy binding on first user playback request to guarantee zero startup overhead and no launch crashes
+        bindAudioService();
     }
 
     private void bindAudioService() {

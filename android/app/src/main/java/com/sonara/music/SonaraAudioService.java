@@ -386,6 +386,9 @@ public class SonaraAudioService extends MediaSessionService {
                 } else {
                     stopProgressTracking();
                 }
+                if (listener != null) {
+                    listener.onPlaybackStateChanged(isPlaying);
+                }
             }
 
             @Override
@@ -395,8 +398,8 @@ public class SonaraAudioService extends MediaSessionService {
                                    (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) ? "AUDIO_BECOMING_NOISY" :
                                    (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE) ? "REMOTE" : "END_OF_MEDIA_ITEM";
                 Log.i(TAG, "[onPlayWhenReadyChanged] playWhenReady=" + playWhenReady + " reason=" + reasonStr + " (" + reason + ")");
-                if (listener != null) {
-                    listener.onPlaybackStateChanged(playWhenReady);
+                if (!playWhenReady && listener != null) {
+                    listener.onPlaybackStateChanged(false);
                 }
             }
 
@@ -570,6 +573,15 @@ public class SonaraAudioService extends MediaSessionService {
 
     public void setListener(ServiceListener listener) {
         this.listener = listener;
+        if (listener != null && player != null) {
+            listener.onPlaybackStateChanged(player.isPlaying());
+            int idx = getCurrentIndex();
+            TrackItem track = getCurrentTrack();
+            if (idx >= 0 && track != null) {
+                listener.onTrackTransition(idx, track);
+            }
+            listener.onProgressUpdated(getCurrentPosition(), getDuration());
+        }
     }
 
     // Populate native playlist queue into ExoPlayer

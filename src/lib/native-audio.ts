@@ -96,6 +96,10 @@ export async function syncNativePlaybackState() {
       if (trackChangeListener && targetSong) {
         trackChangeListener(targetSong.id, nativeState.currentIndex);
       }
+      if (!state.queue.length && nativeState.song) {
+        (updates as any).queue = [nativeState.song];
+        (updates as any).originalQueue = [nativeState.song];
+      }
     }
     if (Number.isFinite(nativeState.position) && nativeState.position >= 0) {
       updates.progress = nativeState.position;
