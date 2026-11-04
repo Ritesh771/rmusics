@@ -16,8 +16,29 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Shared signing key so APKs install over each other no matter who built them.
+    // CI supplies it from GitHub secrets (.github/workflows/android.yml). Locally, set
+    // SONARA_KEYSTORE_FILE + SONARA_KEYSTORE_PASSWORD to use it; otherwise debug builds
+    // fall back to this machine's default debug key and release builds stay unsigned.
+    def sonaraKeystore = System.getenv('SONARA_KEYSTORE_FILE')
+    def sonaraPassword = System.getenv('SONARA_KEYSTORE_PASSWORD')
+    def useSharedKey = sonaraKeystore && sonaraPassword && file(sonaraKeystore).exists()
+    signingConfigs {
+        shared {
+            if (useSharedKey) {
+                storeFile file(sonaraKeystore)
+                storePassword sonaraPassword
+                keyAlias 'sonara'
+                keyPassword sonaraPassword
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (useSharedKey) signingConfig signingConfigs.shared
+        }
         release {
+            if (useSharedKey) signingConfig signingConfigs.shared
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

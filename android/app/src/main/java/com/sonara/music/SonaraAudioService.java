@@ -528,18 +528,16 @@ public class SonaraAudioService extends MediaSessionService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
         Log.i(TAG, "[onStartCommand] flags=" + flags + " startId=" + startId + " action=" + (intent != null ? intent.getAction() : "null"));
-        return START_STICKY;
+        // Don't let Android resurrect the service after the app is swiped away / killed.
+        return START_NOT_STICKY;
     }
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        Log.i(TAG, "[onTaskRemoved] App task removed from recents. player=" + (player != null ? player.isPlaying() : "null"));
-        if (player == null || !player.getPlayWhenReady() || player.getPlaybackState() == Player.STATE_ENDED) {
-            Log.i(TAG, "[onTaskRemoved] Stopping service since playback is idle/ended");
-            stopSelf();
-        } else {
-            Log.i(TAG, "[onTaskRemoved] Playback is actively running; preserving foreground playback service");
-        }
+        // Swiped from recents: stop playback and remove the notification. Background and
+        // lock-screen playback keep working as long as the task is still in recents.
+        Log.i(TAG, "[onTaskRemoved] App removed from recents; pausing and stopping service");
+        pauseAllPlayersAndStopSelf();
     }
 
     @OptIn(markerClass = UnstableApi.class)

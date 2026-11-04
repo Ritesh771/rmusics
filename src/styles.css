@@ -245,10 +245,7 @@
 .aurora-2 { bottom: -18%; right: -15%; width: 75vmax; height: 75vmax; animation: aurora-2 22s ease-in-out infinite; animation-delay: -4s; }
 .aurora-3 { top: 20%; left: 40%; width: 55vmax; height: 55vmax; animation: aurora-3 26s ease-in-out infinite; animation-delay: -10s; }
 .aurora-4 { bottom: 10%; left: -10%; width: 50vmax; height: 50vmax; animation: aurora-4 30s ease-in-out infinite; animation-delay: -7s; }
-.aurora-active .aurora-blob { animation-name: aurora-1; animation-duration: 22s; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
-.aurora-active .aurora-2 { animation-name: aurora-2; animation-duration: 26s; }
-.aurora-active .aurora-3 { animation-name: aurora-3; animation-duration: 30s; }
-.aurora-active .aurora-4 { animation-name: aurora-4; animation-duration: 34s; }
+.aurora-paused .aurora-blob { animation-play-state: paused; }
 
 @keyframes pulse-soft {
   0%, 100% { opacity: 0.85; }
